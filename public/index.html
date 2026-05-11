@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>🌸 AI Companion</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ==================== 欢迎页 ==================== -->
+<div id="welcome" class="overlay">
+  <div class="welcome-box">
+    <h1>🌸 AI Companion</h1>
+    <p>和你的二次元伙伴视频通话</p>
+
+    <!-- Step 1: 立绘 -->
+    <div class="step">
+      <span class="step-num">1</span>
+      <div class="step-body">
+        <p><strong>角色立绘</strong>（推荐透明背景 PNG）</p>
+        <label class="upload-btn">选择图片<input type="file" id="w-image" accept="image/*" hidden></label>
+        <img id="w-preview" class="preview hidden">
+      </div>
+    </div>
+
+    <!-- Step 1b: 表情图层 -->
+    <details class="step-details">
+      <summary>🎭 角色表情（可选 — 上传不同表情的立绘）</summary>
+      <div class="expr-grid" id="w-expr-grid">
+        <!-- JS 动态生成 -->
+      </div>
+    </details>
+
+    <!-- Step 2: API -->
+    <div class="step">
+      <span class="step-num">2</span>
+      <div class="step-body">
+        <p><strong>AI API</strong></p>
+        <input id="w-api-url" value="https://open.bigmodel.cn/api/paas/v4/chat/completions" placeholder="API 地址">
+        <input id="w-api-key" type="password" placeholder="API Key">
+        <input id="w-model" value="glm-4-flash" placeholder="模型名">
+      </div>
+    </div>
+
+    <!-- Step 3: 角色设定 -->
+    <div class="step">
+      <span class="step-num">3</span>
+      <div class="step-body">
+        <p><strong>角色设定</strong></p>
+        <textarea id="w-personality" rows="4">你叫小雪，是一个害羞、温柔的二次元女孩。你很容易害羞，被夸奖时尤其明显。你喜欢读书和画画，说话温柔，偶尔会结巴。你在和用户视频通话，请自然地对话。</textarea>
+      </div>
+    </div>
+
+    <!-- Step 3b: 声线 -->
+    <details class="step-details">
+      <summary>🎙️ 语音声线</summary>
+      <div class="voice-list" id="w-voice-list">
+        <!-- JS 动态生成 -->
+      </div>
+    </details>
+
+    <!-- Step 4: BGM -->
+    <details class="step-details">
+      <summary>🎵 背景音乐曲库（可选）</summary>
+      <p class="hint-text">为不同情境上传背景音乐，通话时自动切换</p>
+      <div class="bgm-grid" id="w-bgm-grid">
+        <!-- JS 动态生成 -->
+      </div>
+    </details>
+
+    <button id="w-start" class="btn-primary btn-large" disabled>🌸 开始通话</button>
+    <p id="w-hint" class="hint">请上传角色立绘并填写 API Key</p>
+  </div>
+</div>
+
+<!-- ==================== 主界面 ==================== -->
+<div id="app" class="hidden">
+  <!-- 状态栏 -->
+  <header id="status-bar">
+    <div class="status-left">
+      <span class="dot online"></span>
+      <span id="char-name">小雪</span>
+    </div>
+    <div class="status-right">
+      <span id="timer">00:00</span>
+      <button id="btn-end" title="结束通话" class="icon-btn danger">📞</button>
+    </div>
+  </header>
+
+  <!-- 场景 -->
+  <main id="scene">
+    <!-- 背景层 -->
+    <div id="bg-layer" class="bg-bedroom"></div>
+
+    <!-- 角色容器（立绘 + 表情层分离） -->
+    <div id="character-wrap">
+      <div id="character">
+        <img id="char-base" src="" alt="">
+        <img id="char-expr" class="hidden" src="" alt="">
+        <!-- 情绪特效层 -->
+        <div id="fx-blush"></div>
+        <div id="fx-sparkles"></div>
+        <div id="fx-tears"></div>
+        <div id="fx-anger"></div>
+        <div id="fx-hearts"></div>
+      </div>
+    </div>
+
+    <!-- 对话气泡 -->
+    <div id="speech-bubble" class="hidden">
+      <p id="bubble-text"></p>
+    </div>
+
+    <!-- 打字指示器 -->
+    <div id="typing" class="hidden">
+      <span></span><span></span><span></span>
+    </div>
+
+    <!-- 情绪标签显示 -->
+    <div id="emotion-tag" class="hidden"></div>
+  </main>
+
+  <!-- BGM 播放器 -->
+  <div id="bgm-bar">
+    <button id="bgm-toggle" class="icon-btn small" title="音乐开关">🎵</button>
+    <span id="bgm-name">未播放</span>
+    <input type="range" id="bgm-vol" min="0" max="100" value="25" title="音量">
+  </div>
+
+  <!-- 聊天面板 -->
+  <aside id="chat-panel" class="hidden">
+    <div id="chat-header">
+      <span>💬 聊天记录</span>
+      <button id="btn-close-chat">✕</button>
+    </div>
+    <div id="chat-messages"></div>
+  </aside>
+
+  <!-- 底部控制栏 -->
+  <footer id="controls">
+    <div id="input-row">
+      <button id="btn-mic" title="语音输入" class="icon-btn">🎤</button>
+      <input id="msg-input" type="text" placeholder="说点什么…" autocomplete="off">
+      <button id="btn-send" title="发送" class="icon-btn accent">➤</button>
+    </div>
+    <div id="action-row">
+      <button id="btn-chat" class="icon-btn" title="聊天记录">💬</button>
+      <button id="btn-bg" class="icon-btn" title="切换背景">🖼️</button>
+      <button id="btn-settings" class="icon-btn" title="设置">⚙️</button>
+    </div>
+  </footer>
+</div>
+
+<!-- ==================== 设置弹窗 ==================== -->
+<div id="modal-settings" class="modal hidden">
+  <div class="modal-body">
+    <h2>⚙️ 设置</h2>
+    <label>角色名称</label>
+    <input id="s-name" type="text">
+    <label>性格描述</label>
+    <textarea id="s-personality" rows="3"></textarea>
+    <hr>
+    <label>API 地址</label>
+    <input id="s-api-url" type="text">
+    <label>API Key</label>
+    <input id="s-api-key" type="password">
+    <label>模型</label>
+    <input id="s-model" type="text">
+    <hr>
+    <label>语音声线</label>
+    <select id="s-tts-voice"></select>
+    <div class="modal-actions">
+      <button id="s-save" class="btn-primary">保存</button>
+      <button id="s-close" class="btn-secondary">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 背景选择弹窗 ==================== -->
+<div id="modal-bg" class="modal hidden">
+  <div class="modal-body">
+    <h2>🖼️ 选择背景</h2>
+    <div id="bg-grid"></div>
+    <label class="upload-btn" style="margin-top:12px">
+      上传自定义背景
+      <input type="file" id="bg-upload" accept="image/*" hidden>
+    </label>
+    <div class="modal-actions">
+      <button id="bg-close" class="btn-secondary">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

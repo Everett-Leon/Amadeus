@@ -1,0 +1,14 @@
+{
+  "name": "ai-companion",
+  "version": "0.2.0",
+  "description": "二次元AI伙伴 - 视频通话风格对话",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "msedge-tts": "^2.0.5"
+  }
+}
