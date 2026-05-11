@@ -154,7 +154,7 @@
 
 <!-- ==================== 设置弹窗 ==================== -->
 <div id="modal-settings" class="modal hidden">
-  <div class="modal-body">
+  <div class="modal-body" style="max-height:85vh;overflow-y:auto;">
     <h2>⚙️ 设置</h2>
     <label>角色名称</label>
     <input id="s-name" type="text">
@@ -170,6 +170,34 @@
     <hr>
     <label>语音声线</label>
     <select id="s-tts-voice"></select>
+
+    <!-- ========== 记忆管理区域 ========== -->
+    <hr>
+    <h3>🧠 记忆系统</h3>
+
+    <div class="memory-config-row">
+      <div>
+        <label>短期记忆条数（发送给 AI 的上下文数量）</label>
+        <input id="s-memory-short-term" type="number" min="5" max="200" value="50" style="width:80px;">
+      </div>
+      <div>
+        <label>注入摘要数量（每次通话加载的历史摘要）</label>
+        <input id="s-memory-summary-count" type="number" min="0" max="20" value="5" style="width:80px;">
+      </div>
+    </div>
+
+    <details open class="memory-section">
+      <summary>📋 对话摘要（<span id="memory-summary-count">0</span>）</summary>
+      <div id="memory-summary-list" class="memory-list"></div>
+      <button id="memory-clear-summaries" class="btn-secondary btn-small" style="margin-top:8px;">清空所有摘要</button>
+    </details>
+
+    <details open class="memory-section">
+      <summary>🎯 关键记忆（<span id="memory-key-count">0</span>）</summary>
+      <div id="memory-key-list" class="memory-list"></div>
+      <button id="memory-clear-keys" class="btn-secondary btn-small" style="margin-top:8px;">清空所有关键记忆</button>
+    </details>
+
     <div class="modal-actions">
       <button id="s-save" class="btn-primary">保存</button>
       <button id="s-close" class="btn-secondary">关闭</button>
@@ -192,6 +220,8 @@
   </div>
 </div>
 
+<script src="memory-system.js"></script>
+<script src="nlu.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

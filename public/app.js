@@ -67,6 +67,11 @@
     bgm: {},            // mood_id -> { name, url }
     bgmVolume: 0.25,
     bgmEnabled: true,
+    // 记忆系统配置
+    memory: {
+      shortTermLimit: 50,   // 短期记忆（发送给 LLM 的上下文条数）
+      summaryLimit: 5,      // 注入 system prompt 的摘要数量
+    },
   };
 
   let chatHistory = [];
@@ -269,6 +274,8 @@
 
     startTimer();
     setEmotion('idle');
+
+    // 构建包含记忆上下文的 system prompt
     chatHistory = [{ role: 'system', content: buildSystemPrompt() }];
     addChatMsg('ai', `（${config.name}已上线，正在等你说话…）`);
 
@@ -294,7 +301,17 @@
   }
 
   function buildSystemPrompt() {
-    return `${config.personality}
+    // 构建记忆上下文
+    const memoryContext = MemorySystem.buildMemoryContext();
+
+    let prompt = `${config.personality}`;
+
+    // 如果有记忆内容，追加到人设之后
+    if (memoryContext) {
+      prompt += `\n\n${memoryContext}\n\n请根据以上记忆信息，自然地在对话中提及或回应相关内容，让用户感觉到你真的记得过去的事情。但不要刻意强调"我记得"，而是自然地融入对话。`;
+    }
+
+    prompt += `
 
 规则：
 1. 你正在和用户视频通话，回复要口语化、自然、简短。
@@ -311,6 +328,8 @@
 4. 严禁在对话中出现任何方括号标签，像正常人说话一样。
 5. 你的情绪要严格符合你的人设。比如你性格害羞，那被夸奖时一定会害羞，即使被要求"笑一个"也应该先是害羞；你性格开朗，那大部分时候都很开心。你的性格决定了你的情绪反应，不要忽视这一点。
 6. 回复长度控制在 1-2 句话，像视频通话一样自然。`;
+
+    return prompt;
   }
 
   // ============================
@@ -362,43 +381,103 @@
   }
 
   // ============================
-  // 发送消息
+  // 发送消息（集成 NLU 意图解析）
   // ============================
   async function sendMessage() {
     const text = $('#msg-input').value.trim();
     if (!text || isProcessing) return;
 
     $('#msg-input').value = '';
-    addChatMsg('user', text);
-    chatHistory.push({ role: 'user', content: text });
 
-    // 用户主动要看某种情绪 → 提示 AI 优先展示该情绪（不再前端硬切，由 AI [emotion:xxx] 标签决定立绘）
-    const emotionHints = {
-      happy: /开心|高兴|笑|嘻嘻|哈哈|happy/i,
-      shy: /害羞|脸红|羞涩|不好意思|shy/i,
-      sad: /难过|伤心|哭|sad|忧伤/i,
-      angry: /生气|愤怒|哼|angry/i,
-      surprised: /惊讶|吃惊|surprised|吓了一跳/i,
-      thinking: /思考|想一想|想想|thinking/i,
-      embarrassed: /尴尬|embarrassed/i,
-    };
-    let hintEmotion = '';
-    for (const [em, regex] of Object.entries(emotionHints)) {
-      if (regex.test(text)) {
-        hintEmotion = em;
-        break;
+    // ========== NLU 意图解析 ==========
+    const intent = NLU.parse(text);
+    let systemPromptModifier = '';  // 附加的 system prompt 修饰
+    let memoryContext = '';         // 记忆检索上下文
+
+    // 处理特殊意图
+    if (intent.intent === NLU.INTENTS.SHOW_EMOTION) {
+      // 情绪展示：直接设置情绪提示，让 AI 配合
+      addChatMsg('user', text);
+      chatHistory.push({ role: 'user', content: text + `\n[用户希望看到的情绪：${intent.params.emotion}]` });
+      // 同时前端也做立绘切换提示
+      setEmotion(intent.params.emotion);
+    } else if (intent.intent === NLU.INTENTS.ASK_ABOUT_MEMORY) {
+      // 记忆查询：从记忆系统检索相关内容
+      addChatMsg('user', text);
+      const memories = MemorySystem.searchMemories(text);
+      if (memories.length > 0) {
+        memoryContext = '\n\n【用户询问的过往记忆】\n' +
+          memories.map(m => `- ${m.text}`).join('\n') +
+          '\n请根据这些记忆自然地回答用户的问题。';
+      } else {
+        memoryContext = '\n\n【记忆查询】用户在问关于过去的事情，但你没有找到相关的记忆记录。请诚实地回应，可以表示不太确定。';
       }
-    }
-    // 将情绪提示追加到用户消息中，让 AI 根据人设决定是否匹配该情绪
-    if (hintEmotion) {
-      chatHistory[chatHistory.length - 1].content += `\n[用户希望看到的情绪：${hintEmotion}]`;
+      chatHistory.push({ role: 'user', content: text + (memoryContext || '') });
+    } else if (intent.intent === NLU.INTENTS.TELL_STORY) {
+      // 故事请求：添加故事讲述修饰
+      addChatMsg('user', text);
+      systemPromptModifier = NLU.getStoryPromptModifier();
+      chatHistory.push({ role: 'user', content: text });
+    } else if (NLU.isSpecialIntent(intent.intent)) {
+      // 其他动作意图（sing/dance/walk_away 等）：显示占位描述
+      const desc = NLU.getActionDescription(intent);
+      if (desc) {
+        addChatMsg('system', desc);  // 显示动作占位文字
+      }
+      addChatMsg('user', text);
+      // 将动作指令传给 AI，让 AI 配合回应
+      chatHistory.push({
+        role: 'user',
+        content: `${text}\n[用户触发了动作指令：${intent.intent}，参数：${JSON.stringify(intent.params)}。请在回复中配合这个动作做出自然的反应，就像你真的执行了这个动作一样。]`,
+      });
+      // 如果动作关联了情绪，设置一下
+      if (intent.params.emotion) {
+        setEmotion(intent.params.emotion);
+      }
+    } else {
+      // 普通 CHITCHAT：保留原有逻辑
+      addChatMsg('user', text);
+
+      // 用户主动要看某种情绪 → 提示 AI 优先展示该情绪（不再前端硬切，由 AI [emotion:xxx] 标签决定立绘）
+      const emotionHints = {
+        happy: /开心|高兴|笑|嘻嘻|哈哈|happy/i,
+        shy: /害羞|脸红|羞涩|不好意思|shy/i,
+        sad: /难过|伤心|哭|sad|忧伤/i,
+        angry: /生气|愤怒|哼|angry/i,
+        surprised: /惊讶|吃惊|surprised|吓了一跳/i,
+        thinking: /思考|想一想|想想|thinking/i,
+        embarrassed: /尴尬|embarrassed/i,
+      };
+      let hintEmotion = '';
+      for (const [em, regex] of Object.entries(emotionHints)) {
+        if (regex.test(text)) {
+          hintEmotion = em;
+          break;
+        }
+      }
+      // 将情绪提示追加到用户消息中，让 AI 根据人设决定是否匹配该情绪
+      if (hintEmotion) {
+        chatHistory.push({ role: 'user', content: text + `\n[用户希望看到的情绪：${hintEmotion}]` });
+      } else {
+        chatHistory.push({ role: 'user', content: text });
+      }
     }
 
     isProcessing = true;
     $('#typing').classList.remove('hidden');
 
     try {
-      const reply = await callAPI();
+      // 如果有 system prompt 修饰（如讲故事），临时注入到当前对话上下文
+      let messagesToSend = [...chatHistory];
+      if (systemPromptModifier) {
+        // 在最后一条用户消息前插入一条系统指示
+        messagesToSend.splice(-1, 0, {
+          role: 'system',
+          content: systemPromptModifier,
+        });
+      }
+
+      const reply = await callAPI(messagesToSend);
       const { clean, emotion } = parseEmotion(reply);
       chatHistory.push({ role: 'assistant', content: clean });
       addChatMsg('ai', clean);
@@ -420,11 +499,14 @@
     $('#typing').classList.add('hidden');
   }
 
-  async function callAPI() {
+  async function callAPI(overrideMessages) {
+    // 使用传入的消息或从 chatHistory 中截取（支持可配置的短期记忆条数）
+    const limit = config.memory?.shortTermLimit || 20;
+    const messages = overrideMessages || chatHistory.slice(-limit);
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiUrl: config.apiUrl, apiKey: config.apiKey, model: config.model, messages: chatHistory.slice(-20) }),
+      body: JSON.stringify({ apiUrl: config.apiUrl, apiKey: config.apiKey, model: config.model, messages }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -679,7 +761,14 @@
   function addChatMsg(role, text) {
     const div = document.createElement('div');
     div.className = `chat-msg ${role}`;
-    div.textContent = text;
+    if (role === 'system') {
+      // 动作描述等系统消息，用斜体灰色显示
+      div.innerHTML = `<em>${text}</em>`;
+      div.style.color = '#888';
+      div.style.fontSize = '0.9em';
+    } else {
+      div.textContent = text;
+    }
     $('#chat-messages').appendChild(div);
     $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
   }
@@ -707,6 +796,64 @@
   function stopMic() { $('#btn-mic').classList.remove('recording'); }
 
   // ============================
+  // 记忆管理 UI
+  // ============================
+  function populateMemorySettings() {
+    // 填充配置值
+    $('#s-memory-short-term').value = config.memory?.shortTermLimit || 50;
+    $('#s-memory-summary-count').value = config.memory?.summaryLimit || 5;
+
+    // 渲染摘要列表
+    const summaryList = $('#memory-summary-list');
+    summaryList.innerHTML = '';
+    const summaries = MemorySystem.getSummaries();
+    if (summaries.length === 0) {
+      summaryList.innerHTML = '<div class="memory-empty">暂无对话摘要（结束通话后自动生成）</div>';
+    } else {
+      // 按时间倒序显示
+      [...summaries].reverse().forEach((s, i) => {
+        const el = document.createElement('div');
+        el.className = 'memory-item';
+        el.innerHTML = `<span class="memory-date">${s.date}</span><span class="memory-text">${escapeHtml(s.summary)}</span>`;
+        summaryList.appendChild(el);
+      });
+    }
+    $('#memory-summary-count').textContent = `${summaries.length} 条`;
+
+    // 渲染关键记忆列表
+    const keyList = $('#memory-key-list');
+    keyList.innerHTML = '';
+    const keyMemories = MemorySystem.getKeyMemory();
+    if (keyMemories.length === 0) {
+      keyList.innerHTML = '<div class="memory-empty">暂无关键记忆（结束通话后自动提取）</div>';
+    } else {
+      keyMemories.forEach((m, i) => {
+        const el = document.createElement('div');
+        el.className = 'memory-item';
+        const typeLabel = { preference: '🎯 偏好', event: '📅 事件', promise: '🤝 承诺', fact: '📝 事实' };
+        el.innerHTML = `
+          <span class="memory-type">${typeLabel[m.type] || m.type}</span>
+          <span class="memory-text">${escapeHtml(m.content)}</span>
+          <button class="memory-delete" data-index="${i}" title="删除">✕</button>
+        `;
+        el.querySelector('.memory-delete').addEventListener('click', () => {
+          MemorySystem.removeKeyMemory(i);
+          populateMemorySettings(); // 刷新列表
+        });
+        keyList.appendChild(el);
+      });
+    }
+    $('#memory-key-count').textContent = `${keyMemories.length} 条`;
+  }
+
+  /** HTML 转义 */
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // ============================
   // 设置弹窗
   // ============================
   function populateSettings() {
@@ -723,6 +870,9 @@
       if (v.id === config.ttsVoice) opt.selected = true;
       sel.appendChild(opt);
     });
+
+    // 记忆管理 UI
+    populateMemorySettings();
   }
 
   function bindSettings() {
@@ -733,10 +883,25 @@
       config.apiKey = $('#s-api-key').value.trim();
       config.model = $('#s-model').value.trim();
       config.ttsVoice = $('#s-tts-voice').value;
+      // 记忆配置
+      config.memory.shortTermLimit = parseInt($('#s-memory-short-term').value) || 50;
+      config.memory.summaryLimit = parseInt($('#s-memory-summary-count').value) || 5;
       $('#char-name').textContent = config.name;
       if (chatHistory.length > 0) chatHistory[0] = { role: 'system', content: buildSystemPrompt() };
       saveConfig();
       $('#modal-settings').classList.add('hidden');
+    });
+
+    // 记忆管理：清空按钮
+    $('#memory-clear-summaries')?.addEventListener('click', () => {
+      if (!confirm('确定要清空所有对话摘要吗？')) return;
+      MemorySystem.clearSummaries();
+      populateMemorySettings();
+    });
+    $('#memory-clear-keys')?.addEventListener('click', () => {
+      if (!confirm('确定要清空所有关键记忆吗？')) return;
+      MemorySystem.clearKeyMemory();
+      populateMemorySettings();
     });
   }
 
@@ -779,10 +944,32 @@
   // ============================
   // 结束通话
   // ============================
-  function endCall() {
+  async function endCall() {
     clearInterval(timerInterval);
     if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     stopBGM();
+
+    // 记忆系统：异步生成摘要和提取关键记忆（不阻塞 UI）
+    const historyForMemory = [...chatHistory];
+    try {
+      // 并行执行摘要生成和关键记忆提取
+      await Promise.all([
+        MemorySystem.generateSummary(historyForMemory, {
+          apiUrl: config.apiUrl,
+          apiKey: config.apiKey,
+          model: config.model,
+        }),
+        MemorySystem.extractKeyMemories(historyForMemory, {
+          apiUrl: config.apiUrl,
+          apiKey: config.apiKey,
+          model: config.model,
+        }),
+      ]);
+      console.log('[Memory] 通话结束，记忆已保存');
+    } catch (err) {
+      console.warn('[Memory] 记忆保存失败（不影响正常使用）:', err.message);
+    }
+
     chatHistory = [];
     $('#chat-messages').innerHTML = '';
     $('#app').classList.add('hidden');
@@ -802,6 +989,8 @@
         expressions: config.expressions, // server URLs
         bgm: config.bgm, // server URLs
         bgmVolume: config.bgmVolume, bgmEnabled: config.bgmEnabled,
+        // 记忆系统配置
+        memory: config.memory,
       }));
     } catch {}
   }
