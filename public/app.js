@@ -315,19 +315,15 @@
 
 规则：
 1. 你正在和用户视频通话，回复要口语化、自然、简短。
-2. 每次回复末尾加一个情绪标签，格式 [emotion:xxx]，可选：
-   [emotion:happy] 开心  — 被夸奖、聊到喜欢的事、收到礼物时
-   [emotion:shy] 害羞    — 被调戏、被夸可爱、暧昧话题时
-   [emotion:embarrassed] 尴尬 — 被拆穿、说错话、冷场时
-   [emotion:sad] 难过    — 被冷落、提到伤心事、用户难过时
-   [emotion:angry] 生气  — 被冒犯、被忽视、被欺负时
-   [emotion:surprised] 惊讶 — 听到意外消息、突然的事时
-   [emotion:thinking] 思考 — 被问复杂问题、犹豫不决时
-   [emotion:idle] 平静   — 普通闲聊、打招呼、日常话题时
+2. 【强制】每次回复的最后一行必须包含且仅包含一个情绪标签，格式为 [emotion:xxx]。可选值：happy / shy / embarrassed / sad / angry / surprised / thinking / idle。这是系统要求，不是可选项，必须执行。
 3. 情绪标签不会显示给用户，也不会被读出来。你只需要用它来表达你当前的情绪状态。
-4. 严禁在对话中出现任何方括号标签，像正常人说话一样。
-5. 你的情绪要严格符合你的人设。比如你性格害羞，那被夸奖时一定会害羞，即使被要求"笑一个"也应该先是害羞；你性格开朗，那大部分时候都很开心。你的性格决定了你的情绪反应，不要忽视这一点。
-6. 回复长度控制在 1-2 句话，像视频通话一样自然。`;
+4. 严禁在对话中出现任何方括号标签（除了情绪标签），像正常人说话一样。
+5. 你的情绪要严格符合你的人设。比如你性格害羞，那被夸奖时一定会害羞；你性格开朗，那大部分时候都很开心。你的性格决定了你的情绪反应，不要忽视这一点。
+6. 回复长度控制在 1-2 句话，像视频通话一样自然。
+7. 示例：
+   - "你好呀～今天天气真好呢 [emotion:happy]"
+   - "诶、那个...谢谢夸奖啦 [emotion:shy]"
+   - "嗯...让我想想 [emotion:thinking]"`;
 
     return prompt;
   }
@@ -389,10 +385,11 @@
 
     $('#msg-input').value = '';
 
-    // ========== NLU 意图解析 ==========
+    // NLU 意图解析
     const intent = NLU.parse(text);
     let systemPromptModifier = '';  // 附加的 system prompt 修饰
     let memoryContext = '';         // 记忆检索上下文
+    let hintEmotion = '';          // 用户情绪提示（统一在函数作用域声明，避免块级作用域 bug）
 
     // 处理特殊意图
     if (intent.intent === NLU.INTENTS.SHOW_EMOTION) {
@@ -448,7 +445,7 @@
         thinking: /思考|想一想|想想|thinking/i,
         embarrassed: /尴尬|embarrassed/i,
       };
-      let hintEmotion = '';
+      hintEmotion = '';
       for (const [em, regex] of Object.entries(emotionHints)) {
         if (regex.test(text)) {
           hintEmotion = em;
@@ -479,6 +476,7 @@
 
       const reply = await callAPI(messagesToSend);
       const { clean, emotion } = parseEmotion(reply);
+      console.log(`[Emotion Debug] AI原文: ${reply} | 解析情绪: ${emotion} | 用户提示: ${hintEmotion || '无'}`);
       chatHistory.push({ role: 'assistant', content: clean });
       addChatMsg('ai', clean);
 
@@ -491,8 +489,12 @@
       switchBGM(mood);
     } catch (err) {
       console.error('API error:', err);
-      addChatMsg('ai', '（网络错误，请检查 API 配置…）');
-      setEmotion('sad');
+      if (err.name === 'AbortError') {
+        addChatMsg('ai', '（回复超时了，请再试一次）');
+      } else {
+        addChatMsg('ai', '（网络错误，请检查 API 配置…）');
+      }
+      setEmotion('idle');
     }
 
     isProcessing = false;
@@ -503,14 +505,21 @@
     // 使用传入的消息或从 chatHistory 中截取（支持可配置的短期记忆条数）
     const limit = config.memory?.shortTermLimit || 20;
     const messages = overrideMessages || chatHistory.slice(-limit);
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiUrl: config.apiUrl, apiKey: config.apiKey, model: config.model, messages }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    return data.choices?.[0]?.message?.content || '';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000); // 30 秒超时
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiUrl: config.apiUrl, apiKey: config.apiKey, model: config.model, messages }),
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content || '';
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   // ============================
@@ -520,9 +529,33 @@
     // 兼容多种格式：[emotion:shy]、[shy]、[shy:害羞]、[emotion:shy:害羞]、[害羞]
     const match = text.match(/\[(?:emotion:\s*)?(\w+)(?::[^\]]*?)?\]/i);
     const raw = match ? match[1].toLowerCase() : '';
-    const emotion = (raw && EMOTIONS.find(e => e.id === raw)) ? raw : 'idle';
+    let emotion = (raw && EMOTIONS.find(e => e.id === raw)) ? raw : 'idle';
     const clean = text.replace(/\[(?:emotion:\s*)?(\w+)(?::[^\]]*?)?\]/gi, '').trim();
+
+    // 兜底：AI 没给标签时，从回复内容关键词推断情绪
+    if (emotion === 'idle' && clean) {
+      const inferred = inferEmotionFromText(clean);
+      if (inferred) emotion = inferred;
+    }
+
     return { clean, emotion };
+  }
+
+  // 从文本内容推断情绪（当 AI 不输出标签时的兜底）
+  function inferEmotionFromText(text) {
+    const rules = [
+      { id: 'happy', re: /哈哈|嘻嘻|嘿嘿|太好了|好开心|高兴|笑|棒|喜欢|爱|耶|~|！{2}/ },
+      { id: 'shy', re: /诶|那个...|谢谢夸奖|不好意思|脸红|害羞|唔|嗯...|别这样|哎呀/ },
+      { id: 'embarrassed', re: /尴尬|呃|这...|那个|不知道说什么|冷场|汗/ },
+      { id: 'sad', re: /难过|伤心|呜|唉|可惜|遗憾|寂寞|孤独|想哭|心疼/ },
+      { id: 'angry', re: /哼|生气|讨厌|烦|气死|可恶|太过分了|不想理你/ },
+      { id: 'surprised', re: /诶？！|哇|天哪|真的吗|不会吧|居然|竟然|吓了一跳/ },
+      { id: 'thinking', re: /嗯...|让我想想|我想想|怎么说呢|这个嘛|考虑一下|也许/ },
+    ];
+    for (const r of rules) {
+      if (r.re.test(text)) return r.id;
+    }
+    return null; // 无法推断，保持 idle
   }
 
   function setEmotion(emotion) {
@@ -530,7 +563,7 @@
     const charEl = $('#character');
     charEl.setAttribute('data-emotion', emotion);
 
-    // 立绘切换
+    // 立绘切换（与 BGM 淡出时间对齐，约 800ms）
     const imgEl = $('#char-base');
     const targetSrc = config.expressions[emotion] || config.image;
     if (imgEl._lastSrc !== targetSrc) {
@@ -540,7 +573,7 @@
         imgEl._lastSrc = targetSrc;
         imgEl.onload = () => { imgEl.style.opacity = '1'; };
         if (imgEl.complete) imgEl.style.opacity = '1';
-      }, 280);
+      }, 700);
     }
 
     spawnParticles(emotion);
@@ -730,6 +763,7 @@
   }
 
   function switchBGM(newMood) {
+    console.log('[BGM] switchBGM:', newMood, '| enabled:', config.bgmEnabled, '| current:', currentBgmMood, '| tracks:', Object.keys(config.bgm));
     if (!config.bgmEnabled || newMood === currentBgmMood) return;
     if (config.bgm[newMood]) playBGM(newMood);
     else if (config.bgm['idle'] && currentBgmMood !== 'idle') playBGM('idle');
@@ -949,10 +983,15 @@
     if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     stopBGM();
 
-    // 记忆系统：异步生成摘要和提取关键记忆（不阻塞 UI）
+    // 记忆系统：立即切回欢迎页，记忆保存后台异步执行
     const historyForMemory = [...chatHistory];
+    chatHistory = [];
+    $('#chat-messages').innerHTML = '';
+    $('#app').classList.add('hidden');
+    $('#welcome').classList.remove('hidden');
+
+    // 异步保存记忆（不阻塞 UI）
     try {
-      // 并行执行摘要生成和关键记忆提取
       await Promise.all([
         MemorySystem.generateSummary(historyForMemory, {
           apiUrl: config.apiUrl,
@@ -969,11 +1008,6 @@
     } catch (err) {
       console.warn('[Memory] 记忆保存失败（不影响正常使用）:', err.message);
     }
-
-    chatHistory = [];
-    $('#chat-messages').innerHTML = '';
-    $('#app').classList.add('hidden');
-    $('#welcome').classList.remove('hidden');
   }
 
   // ============================
