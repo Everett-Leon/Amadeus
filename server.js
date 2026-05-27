@@ -10,7 +10,8 @@ const PORT = process.env.PORT || 3000;
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(uploadsDir));
 
@@ -57,14 +58,20 @@ app.get('/api/tts', async (req, res) => {
 // ========== 文件上传（BGM / 表情图片） ==========
 app.post('/api/upload', (req, res) => {
   const { name, data } = req.body; // data = base64 (no prefix)
-  if (!name || !data) return res.status(400).json({ error: 'missing fields' });
+  if (!name || !data) {
+    console.error('[Upload] 缺少字段:', { hasName: !!name, hasData: !!data });
+    return res.status(400).json({ error: 'missing fields' });
+  }
   try {
     const ext = name.split('.').pop() || 'bin';
     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    fs.writeFileSync(path.join(uploadsDir, filename), Buffer.from(data, 'base64'));
+    const buffer = Buffer.from(data, 'base64');
+    console.log(`[Upload] 上传文件: ${name} (${(buffer.length / 1024).toFixed(1)} KB) -> ${filename}`);
+    fs.writeFileSync(path.join(uploadsDir, filename), buffer);
     res.json({ url: `/uploads/${filename}`, name });
   } catch (err) {
-    res.status(500).json({ error: 'upload failed' });
+    console.error('[Upload] 上传失败:', err.message);
+    res.status(500).json({ error: 'upload failed: ' + err.message });
   }
 });
 

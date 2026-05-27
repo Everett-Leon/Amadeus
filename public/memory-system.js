@@ -146,7 +146,6 @@ ${dialogue}`;
 
       if (cleanSummary) {
         addSummary(cleanSummary);
-        console.log('[Memory] 摘要已保存:', cleanSummary);
       }
       return cleanSummary;
     } catch (err) {
@@ -186,7 +185,6 @@ ${dialogue}`;
         const items = JSON.parse(jsonMatch[0]);
         if (Array.isArray(items) && items.length > 0) {
           addKeyMemories(items);
-          console.log('[Memory] 关键记忆已提取:', items.length, '条');
           return items;
         }
       }

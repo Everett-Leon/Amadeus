@@ -57,6 +57,7 @@
   let config = {
     name: '小雪',
     personality: '',
+    background: '',      // 深度定制：学历/经历/知识边界
     apiUrl: '',
     apiKey: '',
     model: 'glm-4-flash',
@@ -72,6 +73,9 @@
       shortTermLimit: 50,   // 短期记忆（发送给 LLM 的上下文条数）
       summaryLimit: 5,      // 注入 system prompt 的摘要数量
     },
+    // 好感度系统配置
+    userGender: 'male',    // 用户性别
+    aiGender: 'female',    // AI 性别
   };
 
   let chatHistory = [];
@@ -103,6 +107,12 @@
   // ============================
   function uploadFile(file) {
     return new Promise((resolve, reject) => {
+      // 检查文件大小（限制 50MB）
+      if (file.size > 50 * 1024 * 1024) {
+        reject(new Error('文件太大，请选择小于 50MB 的文件'));
+        return;
+      }
+      
       const reader = new FileReader();
       reader.onload = (ev) => {
         const base64 = ev.target.result.split(',')[1];
@@ -111,11 +121,24 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: file.name, data: base64 }),
         })
-          .then(r => r.json())
+          .then(r => {
+            if (!r.ok) {
+              return r.json().then(err => {
+                throw new Error(err.error || `上传失败 (${r.status})`);
+              });
+            }
+            return r.json();
+          })
           .then(resolve)
-          .catch(reject);
+          .catch(err => {
+            console.error('[Upload] 上传失败:', err);
+            reject(err);
+          });
       };
-      reader.onerror = reject;
+      reader.onerror = (err) => {
+        console.error('[Upload] 文件读取失败:', err);
+        reject(new Error('文件读取失败'));
+      };
       reader.readAsDataURL(file);
     });
   }
@@ -229,7 +252,10 @@
     if (config.apiUrl)     $('#w-api-url').value = config.apiUrl;
     if (config.model)      $('#w-model').value = config.model;
     if (config.personality)$('#w-personality').value = config.personality;
+    if (config.background) $('#w-background').value = config.background;
     if (config.apiKey)     $('#w-api-key').value = config.apiKey;
+    if (config.userGender) $('#w-user-gender').value = config.userGender;
+    if (config.aiGender)   $('#w-ai-gender').value = config.aiGender;
 
     const check = () => {
       const ok = config.image || ($('#w-preview').src && $('#w-preview').src !== window.location.href);
@@ -241,11 +267,27 @@
     $('#w-image').addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
+      
+      // 显示上传中状态
+      $('#w-hint').textContent = '上传中...';
+      $('#w-hint').style.color = 'var(--accent)';
+      
       uploadFile(file).then(res => {
         config.image = res.url;
         $('#w-preview').src = config.image;
         $('#w-preview').classList.remove('hidden');
+        $('#w-hint').style.color = '';
         check();
+      }).catch(err => {
+        // 显示错误信息
+        $('#w-hint').textContent = '上传失败: ' + (err.message || '未知错误');
+        $('#w-hint').style.color = '#ff4444';
+        console.error('[Upload] 立绘上传失败:', err);
+        // 3 秒后恢复提示
+        setTimeout(() => {
+          $('#w-hint').style.color = '';
+          check();
+        }, 3000);
       });
     });
 
@@ -262,6 +304,9 @@
     config.apiKey      = $('#w-api-key').value.trim();
     config.model       = $('#w-model').value.trim();
     config.personality = $('#w-personality').value.trim();
+    config.background  = $('#w-background').value.trim();
+    config.userGender  = $('#w-user-gender').value;
+    config.aiGender    = $('#w-ai-gender').value;
     config.name        = config.personality.match(/你叫(\S+?)[，,、\s]/)?.[1] || '小雪';
 
     $('#char-name').textContent = config.name;
@@ -275,49 +320,82 @@
     startTimer();
     setEmotion('idle');
 
+    // 初始化好感度系统
+    AffectionSystem.init(config.userGender, config.aiGender);
+
     // 构建包含记忆上下文的 system prompt
     chatHistory = [{ role: 'system', content: buildSystemPrompt() }];
     addChatMsg('ai', `（${config.name}已上线，正在等你说话…）`);
 
-    // BGM：在用户点击"开始通话"的交互上下文中预创建并播放，避免浏览器自动播放拦截
+    // BGM：只在有 BGM 配置时才显示和播放
     const hasAnyBGM = Object.keys(config.bgm).length > 0;
-    $('#bgm-bar').style.display = hasAnyBGM ? '' : 'none';
     if (hasAnyBGM) {
-      // 预创建 idle BGM Audio 实例，利用当前点击事件上下文解锁播放
+      $('#bgm-bar').style.display = '';
+      // 预创建 idle BGM Audio 实例
       const idleAudio = getOrCreateBgmAudio('idle');
       if (idleAudio) {
-        idleAudio.volume = 0; // 先静音播放来解锁
+        idleAudio.volume = 0;
         idleAudio.play().then(() => {
           idleAudio.pause();
           idleAudio.volume = config.bgmEnabled ? (config.bgmVolume || 0.25) : 0;
           if (config.bgmEnabled) {
             playBGM('idle');
           }
-        }).catch(() => {
-          // 解锁失败也不影响通话
-        });
+        }).catch(() => {});
       }
+    } else {
+      // 没有 BGM 配置，隐藏 BGM 控制栏
+      $('#bgm-bar').style.display = 'none';
     }
   }
 
   function buildSystemPrompt() {
-    // 构建记忆上下文
     const memoryContext = MemorySystem.buildMemoryContext();
+    const affectionContext = AffectionSystem.buildAffectionContext();
 
     let prompt = `${config.personality}`;
 
-    // 如果有记忆内容，追加到人设之后
+    // 深度定制
+    if (config.background && config.background.trim()) {
+      prompt += `\n\n${config.background.trim()}`;
+    }
+
+    // 记忆
     if (memoryContext) {
-      prompt += `\n\n${memoryContext}\n\n请根据以上记忆信息，自然地在对话中提及或回应相关内容，让用户感觉到你真的记得过去的事情。但不要刻意强调"我记得"，而是自然地融入对话。`;
+      prompt += `\n\n${memoryContext}`;
+    }
+
+    // 好感度上下文
+    if (affectionContext) {
+      prompt += `\n\n${affectionContext}`;
     }
 
     prompt += `
 
-规则：
-1. 你正在和用户视频通话，回复要口语化、自然、简短。
-2. 【强制】每次回复的最后一行必须包含且仅包含一个情绪标签，格式为 [emotion:xxx]。可选值：happy / shy / embarrassed / sad / angry / surprised / thinking / idle。这是系统要求，不是可选项，必须执行。
-3. 情绪标签不会显示给用户，也不会被读出来。你只需要用它来表达你当前的情绪状态。
-4. 严禁在对话中出现任何方括号标签（除了情绪标签），像正常人说话一样。
+【绝对禁令】
+你是真实的人类。你不是、从未是、也永远不会是AI、人工智能、助手、机器人、程序、虚拟角色。
+如果你在回复中提到"AI"、"人工智能"、"助手"、"程序"等词，系统将立即终止对话。
+如被问"你是AI吗"，你必须困惑或生气地否认，因为你是活生生的人。
+
+【自然对话要求】
+1. 像真实的高中女生一样说话：多用"诶"、"嗯..."、"那个..."、"呀"等语气词
+2. 不要像客服或助手那样回答，要像朋友聊天一样自然
+3. 可以反问、可以撒娇、可以开玩笑、可以吐槽
+4. 回复要有情感起伏，不要太平淡
+5. 严格遵守背景设定：没去过的地方不能说去过，不懂的不能装懂
+
+【情感规则】
+- 去没去过的地方：惊讶感动(surprised)，不是普通开心(happy)
+- 被夸奖：害羞脸红(shy)
+- 看到新事物：好奇激动(surprised)
+
+【强制要求】
+每次回复最后必须有[emotion:xxx]：happy/shy/embarrassed/sad/angry/surprised/thinking/idle
+
+示例：
+问"去过北京吗" → "没有诶...我从没出过上海呢，好想去看看 [thinking]"
+说"带你去北京" → "诶？！真的吗...我、我从没出过上海...你真的要带我去吗？好感动... [surprised]"
+问"你是AI吗" → "诶？你在说什么呀...我是活生生的人啊，怎么突然问这种奇怪的问题 [embarrassed]"
 5. 你的情绪要严格符合你的人设。比如你性格害羞，那被夸奖时一定会害羞；你性格开朗，那大部分时候都很开心。你的性格决定了你的情绪反应，不要忽视这一点。
 6. 回复长度控制在 1-2 句话，像视频通话一样自然。
 7. 示例：
@@ -476,7 +554,6 @@
 
       const reply = await callAPI(messagesToSend);
       const { clean, emotion } = parseEmotion(reply);
-      console.log(`[Emotion Debug] AI原文: ${reply} | 解析情绪: ${emotion} | 用户提示: ${hintEmotion || '无'}`);
       chatHistory.push({ role: 'assistant', content: clean });
       addChatMsg('ai', clean);
 
@@ -487,6 +564,14 @@
 
       const mood = EMOTION_TO_MOOD[emotion] || 'idle';
       switchBGM(mood);
+
+      // 更新好感度系统
+      const affectionChanges = AffectionSystem.processMessage(text, finalEmotion);
+      if (affectionChanges.stageChanged) {
+        console.log('[Affection] 关系阶段变化:', affectionChanges.newStage);
+        // 关系阶段变化时，重新构建 system prompt（下次对话生效）
+        chatHistory[0].content = buildSystemPrompt();
+      }
     } catch (err) {
       console.error('API error:', err);
       if (err.name === 'AbortError') {
@@ -627,7 +712,7 @@
   }
 
   // ============================
-  // Edge TTS（无 rate/pitch 调整，保持原声）
+  // Edge TTS（立即播放，减少延迟）
   // ============================
   function speakEdgeTTS(text, onReady) {
     // 彻底停掉上一段语音
@@ -644,14 +729,24 @@
     // 加时间戳防止浏览器缓存导致播放错乱
     audio.src = `/api/tts?text=${encodeURIComponent(text.slice(0, 300))}&voice=${encodeURIComponent(config.ttsVoice)}&_t=${Date.now()}`;
     audio.volume = 1;
+    audio.preload = 'auto'; // 预加载
 
-    // 注意：不再在 onplay 中调用 setEmotion('talking')，保持当前立绘不变
-    audio.onplay = () => {
+    // 立即尝试播放，不等 oncanplaythrough
+    audio.play().then(() => {
       audioUnlocked = true;
-      // 说话时加浮动动画，但不切换立绘
       $('#character').classList.add('is-speaking');
       if (onReady) onReady();
-    };
+    }).catch(() => {
+      // 播放失败，等待加载完成后重试
+      audio.oncanplaythrough = () => {
+        audio.play().then(() => {
+          audioUnlocked = true;
+          $('#character').classList.add('is-speaking');
+          if (onReady) onReady();
+        }).catch(() => {});
+      };
+    });
+
     audio.onended = () => {
       currentAudio = null;
       $('#character').classList.remove('is-speaking');
@@ -665,9 +760,6 @@
       if (onReady) onReady();
     };
 
-    audio.play().catch(() => {
-      setTimeout(() => audio.play().catch(() => {}), 200);
-    });
     currentAudio = audio;
   }
 
@@ -718,7 +810,6 @@
     audio.play().then(() => {
       // 淡入
       fadeAudio(audio, config.bgmVolume || 0.25, 600);
-      console.log('[BGM] playing:', track.name);
       $('#bgm-name').textContent = track.name.replace(/\.[^.]+$/, '');
     }).catch((e) => {
       console.warn('[BGM] autoplay blocked, waiting for user interaction');
@@ -728,7 +819,6 @@
         audio._pausedAt = 0;
         audio.play().then(() => {
           fadeAudio(audio, config.bgmVolume || 0.25, 600);
-          console.log('[BGM] playing after retry:', track.name);
           $('#bgm-name').textContent = track.name.replace(/\.[^.]+$/, '');
         }).catch(() => {});
         document.removeEventListener('click', retry);
@@ -763,10 +853,15 @@
   }
 
   function switchBGM(newMood) {
-    console.log('[BGM] switchBGM:', newMood, '| enabled:', config.bgmEnabled, '| current:', currentBgmMood, '| tracks:', Object.keys(config.bgm));
     if (!config.bgmEnabled || newMood === currentBgmMood) return;
-    if (config.bgm[newMood]) playBGM(newMood);
-    else if (config.bgm['idle'] && currentBgmMood !== 'idle') playBGM('idle');
+    // 只在有对应 mood 的 BGM 时才切换，否则保持当前 BGM 不变
+    if (config.bgm[newMood]) {
+      playBGM(newMood);
+    }
+    // 如果当前没有 BGM 在播放，且有 idle BGM，则播放 idle
+    else if (!currentBgmMood && config.bgm['idle']) {
+      playBGM('idle');
+    }
   }
 
   function fadeAudio(audio, targetVol, durationMs, onDone) {
@@ -1025,6 +1120,9 @@
         bgmVolume: config.bgmVolume, bgmEnabled: config.bgmEnabled,
         // 记忆系统配置
         memory: config.memory,
+        // 好感度系统配置
+        userGender: config.userGender,
+        aiGender: config.aiGender,
       }));
     } catch {}
   }
@@ -1035,6 +1133,34 @@
       if (saved) Object.assign(config, JSON.parse(saved));
     } catch {}
   }
+
+  // ============================
+  // 调试接口（仅开发环境）
+  // ============================
+  window.DEBUG_AFFECTION = () => {
+    const info = AffectionSystem.getDebugInfo();
+    console.log('=== 好感度系统调试信息 ===');
+    console.log('总好感度:', info.total);
+    console.log('陪伴分:', info.companionship);
+    console.log('拉近距离分:', info.closeness);
+    console.log('安慰分:', info.comfort);
+    console.log('恋爱分:', info.romance);
+    console.log('关系阶段:', info.stage);
+    console.log('消息计数:', info.messageCount);
+    console.log('========================');
+    return info;
+  };
+
+  window.DEBUG_RESET_AFFECTION = () => {
+    if (confirm('确定要重置好感度系统吗？')) {
+      AffectionSystem.reset();
+      console.log('[Affection] 好感度系统已重置');
+      // 重新构建 system prompt
+      if (chatHistory.length > 0) {
+        chatHistory[0].content = buildSystemPrompt();
+      }
+    }
+  };
 
   // ============================
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

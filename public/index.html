@@ -44,16 +44,48 @@
       </div>
     </div>
 
-    <!-- Step 3: 角色设定 -->
+    <!-- Step 3: 性别设置 -->
     <div class="step">
       <span class="step-num">3</span>
       <div class="step-body">
-        <p><strong>角色设定</strong></p>
-        <textarea id="w-personality" rows="4">你叫小雪，是一个害羞、温柔的二次元女孩。你很容易害羞，被夸奖时尤其明显。你喜欢读书和画画，说话温柔，偶尔会结巴。你在和用户视频通话，请自然地对话。</textarea>
+        <p><strong>性别设置</strong></p>
+        <div style="display:flex;gap:20px;margin-top:8px;">
+          <div style="flex:1;">
+            <label style="display:block;margin-bottom:6px;font-size:0.9em;color:var(--text);font-weight:500;">你的性别</label>
+            <select id="w-user-gender">
+              <option value="male">男</option>
+              <option value="female">女</option>
+            </select>
+          </div>
+          <div style="flex:1;">
+            <label style="display:block;margin-bottom:6px;font-size:0.9em;color:var(--text);font-weight:500;">AI 伴侣性别</label>
+            <select id="w-ai-gender">
+              <option value="female">女</option>
+              <option value="male">男</option>
+            </select>
+          </div>
+        </div>
+        <p class="hint-text" style="margin-top:10px;">💡 同性会发展成好闺蜜，异性会发展成恋人</p>
       </div>
     </div>
 
-    <!-- Step 3b: 声线 -->
+    <!-- Step 4: 角色设定 -->
+    <div class="step">
+      <span class="step-num">4</span>
+      <div class="step-body">
+        <p><strong>角色设定</strong></p>
+        <textarea id="w-personality" rows="4">你叫小雪，17岁，上海本地人，高中在读。性格害羞、温柔，很容易脸红。说话带点上海女生的软糯感，偶尔会用"嗯..."、"那个..."、"诶..."这样的语气词。你喜欢读书和画画，对外面的世界充满好奇。你在和用户视频通话，请自然地对话。</textarea>
+      </div>
+    </div>
+
+    <!-- Step 4b: 深度定制（可选） -->
+    <details class="step-details">
+      <summary>🎭 深度定制（学历/经历/知识边界）</summary>
+      <p class="hint-text">设定角色的学历、去过的地方、知识范围等，AI 会严格遵守这些限制</p>
+      <textarea id="w-background" rows="6" placeholder="示例：&#10;- 学历：高中毕业，未上过大学&#10;- 出生地：上海&#10;- 去过的地方：只去过上海和周边城市，从未出过省&#10;- 知识范围：对大学知识一窍不通，没见过天安门&#10;- 性格特点：对新事物充满好奇，像孩子一样容易惊讶和感动"></textarea>
+    </details>
+
+    <!-- Step 4c: 声线 -->
     <details class="step-details">
       <summary>🎙️ 语音声线</summary>
       <div class="voice-list" id="w-voice-list">
@@ -61,7 +93,7 @@
       </div>
     </details>
 
-    <!-- Step 4: BGM -->
+    <!-- Step 5: BGM -->
     <details class="step-details">
       <summary>🎵 背景音乐曲库（可选）</summary>
       <p class="hint-text">为不同情境上传背景音乐，通话时自动切换</p>
@@ -223,6 +255,7 @@
 
 <script src="memory-system.js"></script>
 <script src="nlu.js"></script>
+<script src="affection-system.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
