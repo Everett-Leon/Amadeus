@@ -1,14 +1,59 @@
 {
   "name": "ai-companion",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "二次元AI伙伴 - 视频通话风格对话",
-  "main": "server.js",
+  "main": "electron.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "electron": "electron .",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.aicompanion.app",
+    "productName": "AI Companion",
+    "asar": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron.js",
+      "server.js",
+      "public/**/*",
+      "uploads/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.entertainment",
+      "target": [
+        "dir"
+      ],
+      "identity": null
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "dmg": {
+      "title": "AI Companion"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   },
   "dependencies": {
+    "axios": "^1.16.1",
     "express": "^4.21.0",
     "msedge-tts": "^2.0.5"
+  },
+  "devDependencies": {
+    "electron": "^42.3.0",
+    "electron-builder": "^26.8.1"
   }
 }

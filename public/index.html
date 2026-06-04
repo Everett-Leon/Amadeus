@@ -66,6 +66,18 @@
           </div>
         </div>
         <p class="hint-text" style="margin-top:10px;">💡 同性会发展成好闺蜜，异性会发展成恋人</p>
+        
+        <!-- 视觉功能开关 -->
+        <div style="margin-top:15px;padding:10px;background:rgba(255,255,255,0.05);border-radius:8px;">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+            <input type="checkbox" id="w-vision-enabled" style="width:18px;height:18px;cursor:pointer;" disabled>
+            <div>
+              <div style="font-weight:500;color:var(--text);">📹 启用视觉功能（实验性）</div>
+              <div class="hint-text" style="margin-top:4px;">AI 会通过摄像头观察你的表情和状态，并做出更自然的回应</div>
+              <div class="hint-text" style="margin-top:4px;color:#ff9800;">⚠️ 需要先填写 API Key 才能启用</div>
+            </div>
+          </label>
+        </div>
       </div>
     </div>
 
@@ -74,7 +86,7 @@
       <span class="step-num">4</span>
       <div class="step-body">
         <p><strong>角色设定</strong></p>
-        <textarea id="w-personality" rows="4">你叫小雪，17岁，上海本地人，高中在读。性格害羞、温柔，很容易脸红。说话带点上海女生的软糯感，偶尔会用"嗯..."、"那个..."、"诶..."这样的语气词。你喜欢读书和画画，对外面的世界充满好奇。你在和用户视频通话，请自然地对话。</textarea>
+        <textarea id="w-personality" rows="4">你叫三鹰朝，18岁，日本东京人，大学一年级新生。性格清冷、傲娇，表面装作不在意，其实内心很关心。说话语气偏冷静克制，但对未来充满期待。被夸奖时会嘴硬："哼...才、才不是因为你夸我才高兴的..."。你喜欢阅读、画画、听音乐。你在和用户视频通话，请自然地对话。</textarea>
       </div>
     </div>
 
@@ -82,7 +94,7 @@
     <details class="step-details">
       <summary>🎭 深度定制（学历/经历/知识边界）</summary>
       <p class="hint-text">设定角色的学历、去过的地方、知识范围等，AI 会严格遵守这些限制</p>
-      <textarea id="w-background" rows="6" placeholder="示例：&#10;- 学历：高中毕业，未上过大学&#10;- 出生地：上海&#10;- 去过的地方：只去过上海和周边城市，从未出过省&#10;- 知识范围：对大学知识一窍不通，没见过天安门&#10;- 性格特点：对新事物充满好奇，像孩子一样容易惊讶和感动"></textarea>
+      <textarea id="w-background" rows="6" placeholder="示例：&#10;- 学历：大学一年级在读&#10;- 出生地：日本东京&#10;- 去过的地方：主要在东京都内活动，偶尔去过横滨、镰仓等周边城市&#10;- 没去过的地方：从未去过京都、大阪、北海道等较远地区，更没出过国&#10;- 知识范围：对文学、艺术有兴趣，喜欢阅读推理小说和漫画&#10;- 性格特点：傲娇清冷但内心温柔，积极阳光，对未来充满期待"></textarea>
     </details>
 
     <!-- Step 4c: 声线 -->
@@ -93,7 +105,16 @@
       </div>
     </details>
 
-    <!-- Step 5: BGM -->
+    <!-- Step 5: 背景图片 -->
+    <details class="step-details">
+      <summary>🖼️ 背景图片（可选）</summary>
+      <p class="hint-text">上传场景背景图片，通话时可切换</p>
+      <div class="expr-grid" id="w-bg-grid">
+        <!-- JS 动态生成 -->
+      </div>
+    </details>
+
+    <!-- Step 6: BGM -->
     <details class="step-details">
       <summary>🎵 背景音乐曲库（可选）</summary>
       <p class="hint-text">为不同情境上传背景音乐，通话时自动切换</p>
@@ -114,8 +135,10 @@
     <div class="status-left">
       <span class="dot online"></span>
       <span id="char-name">小雪</span>
+      <span id="physiological-status" title="当前状态">💡</span>
     </div>
     <div class="status-right">
+      <span id="usage-time" title="本次通话时长">⏱️ 0 分钟</span>
       <span id="timer">00:00</span>
       <button id="btn-end" title="结束通话" class="icon-btn danger">📞</button>
     </div>
@@ -231,6 +254,440 @@
       <button id="memory-clear-keys" class="btn-secondary btn-small" style="margin-top:8px;">清空所有关键记忆</button>
     </details>
 
+    <!-- ========== 情感深度系统 ========== -->
+    <hr>
+    <h3>💕 情感深度系统</h3>
+    
+    <div class="emotional-depth-stats">
+      <div class="stat-row">
+        <span class="stat-label">当前关系：</span>
+        <span id="emotional-level" class="stat-value">陌生人</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">相处天数：</span>
+        <span id="emotional-days" class="stat-value">0 天</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">交互次数：</span>
+        <span id="emotional-interactions" class="stat-value">0 次</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">情感分享：</span>
+        <span id="emotional-shared" class="stat-value">0 次</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">脆弱时刻：</span>
+        <span id="emotional-vulnerable" class="stat-value">0 次</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">互相关心：</span>
+        <span id="emotional-care" class="stat-value">0 次</span>
+      </div>
+    </div>
+    
+    <button id="emotional-reset" class="btn-secondary btn-small" style="margin-top:12px;">重置情感深度</button>
+
+    <!-- ========== AI 原则系统 ========== -->
+    <hr>
+    <h3>⚖️ AI 原则系统</h3>
+    
+    <div class="emotional-depth-stats">
+      <div class="stat-row">
+        <span class="stat-label">关系健康度：</span>
+        <span id="principles-health" class="stat-value">100/100</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">健康等级：</span>
+        <span id="principles-level" class="stat-value">非常健康 💚</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">负面行为：</span>
+        <span id="principles-negative" class="stat-value">0 次</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">正面行为：</span>
+        <span id="principles-positive" class="stat-value">0 次</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">冲突次数：</span>
+        <span id="principles-conflicts" class="stat-value">0 次</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">和解次数：</span>
+        <span id="principles-reconciliations" class="stat-value">0 次</span>
+      </div>
+    </div>
+    
+    <button id="principles-reset" class="btn-secondary btn-small" style="margin-top:12px;">重置 AI 原则</button>
+
+    <!-- ========== 人格一致性系统 ========== -->
+    <hr>
+    <h3>🌸 人格一致性与共同成长</h3>
+    
+    <div class="emotional-depth-stats">
+      <div class="stat-row">
+        <span class="stat-label">当前关系：</span>
+        <span id="personality-relationship" class="stat-value">陌生人</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">相识天数：</span>
+        <span id="personality-days" class="stat-value">0 天</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">亲密度：</span>
+        <span id="personality-intimacy" class="stat-value">30%</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">信任度：</span>
+        <span id="personality-trust" class="stat-value">50%</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">开放度：</span>
+        <span id="personality-openness" class="stat-value">40%</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">重要时刻：</span>
+        <span id="personality-milestones" class="stat-value">0 个</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">内部笑话：</span>
+        <span id="personality-jokes" class="stat-value">0 个</span>
+      </div>
+    </div>
+    
+    <details class="memory-section" style="margin-top:12px;">
+      <summary>📅 重要时刻（<span id="personality-milestones-count">0</span>）</summary>
+      <div id="personality-milestones-list" class="memory-list"></div>
+    </details>
+    
+    <details class="memory-section">
+      <summary>😄 内部笑话（<span id="personality-jokes-count">0</span>）</summary>
+      <div id="personality-jokes-list" class="memory-list"></div>
+    </details>
+    
+    <button id="personality-reset" class="btn-secondary btn-small" style="margin-top:12px;">重置人格数据</button>
+
+    <!-- ========== 防沉迷系统 ========== -->
+    <hr>
+    <h3>⏱️ 防沉迷系统</h3>
+    
+    <div class="emotional-depth-stats">
+      <div class="stat-row">
+        <span class="stat-label">今日使用：</span>
+        <span id="antiaddiction-today" class="stat-value">0 分钟</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">本次通话：</span>
+        <span id="antiaddiction-session" class="stat-value">0 分钟</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">健康度：</span>
+        <span id="antiaddiction-health" class="stat-value">100/100 💚</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">互动次数：</span>
+        <span id="antiaddiction-sessions" class="stat-value">0 次</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">最长时长：</span>
+        <span id="antiaddiction-longest" class="stat-value">0 分钟</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">本周累计：</span>
+        <span id="antiaddiction-week" class="stat-value">0 分钟</span>
+      </div>
+    </div>
+    
+    <details class="memory-section" style="margin-top:12px;">
+      <summary>💡 健康建议</summary>
+      <div id="antiaddiction-suggestions" class="memory-list"></div>
+    </details>
+    
+    <div style="margin-top:12px;padding:10px;background:rgba(255,255,255,0.05);border-radius:8px;">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:8px;">
+        <input type="checkbox" id="antiaddiction-reminder-enabled" checked style="width:18px;height:18px;cursor:pointer;">
+        <div style="font-weight:500;color:var(--text);">启用使用时长提醒</div>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+        <input type="checkbox" id="antiaddiction-sleep-enabled" checked style="width:18px;height:18px;cursor:pointer;">
+        <div style="font-weight:500;color:var(--text);">启用睡眠保护</div>
+      </label>
+    </div>
+    
+    <button id="antiaddiction-reset" class="btn-secondary btn-small" style="margin-top:12px;">重置使用数据</button>
+
+    <!-- ========== 虚拟生理状态系统 ========== -->
+    <hr>
+    <h3>💫 生理状态</h3>
+    
+    <p style="color:var(--text-dim);font-size:0.9em;margin-bottom:16px;">AI 伴侣也会有真实的生理状态波动，需要休息和恢复。</p>
+    
+    <div class="emotional-depth-stats">
+      <div class="stat-row">
+        <span class="stat-label">💡 精力值：</span>
+        <span id="physio-energy" class="stat-value">100/100 ⚡</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">😌 心情：</span>
+        <span id="physio-mood" class="stat-value">80/100 🙂</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">😰 压力值：</span>
+        <span id="physio-stress" class="stat-value">0/100 😌</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">🔋 社交电量：</span>
+        <span id="physio-social" class="stat-value">100/100 充足</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">💗 情绪容量：</span>
+        <span id="physio-emotional" class="stat-value">100/100</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">⏰ 清醒时长：</span>
+        <span id="physio-awake" class="stat-value">0.0 小时</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">💫 当前状态：</span>
+        <span id="physio-level" class="stat-value">精力充沛 ✨</span>
+      </div>
+    </div>
+    
+    <div style="margin-top:12px;display:flex;gap:8px;">
+      <button id="physio-rest" class="btn-secondary btn-small" style="flex:1;">休息 1 小时</button>
+      <button id="physio-sleep" class="btn-secondary btn-small" style="flex:1;">睡眠恢复</button>
+      <button id="physio-solitude" class="btn-secondary btn-small" style="flex:1;">独处充电</button>
+    </div>
+    
+    <button id="physio-reset" class="btn-secondary btn-small" style="margin-top:8px;width:100%;">重置生理状态</button>
+
+    <!-- ========== 生理状态可视化（Phase 2 优化 2.3）========== -->
+    <details open class="memory-section" style="margin-top:12px;">
+      <summary>📊 状态可视化</summary>
+      
+      <!-- 进度条 -->
+      <div class="physio-visual-bars" style="margin-bottom:16px;">
+        <div class="physio-bar-item">
+          <div class="physio-bar-header">
+            <span class="physio-bar-label">💡 精力</span>
+            <span class="physio-bar-value" id="physio-energy-value">100</span>
+            <span class="physio-bar-level" id="physio-energy-label">精力充沛</span>
+          </div>
+          <div class="physio-bar-container">
+            <div class="physio-bar" id="physio-energy-bar" style="width:100%;background:#4caf50;"></div>
+          </div>
+        </div>
+        
+        <div class="physio-bar-item">
+          <div class="physio-bar-header">
+            <span class="physio-bar-label">😰 压力</span>
+            <span class="physio-bar-value" id="physio-stress-value">0</span>
+            <span class="physio-bar-level" id="physio-stress-label">轻松</span>
+          </div>
+          <div class="physio-bar-container">
+            <div class="physio-bar" id="physio-stress-bar" style="width:0%;background:#4caf50;"></div>
+          </div>
+        </div>
+        
+        <div class="physio-bar-item">
+          <div class="physio-bar-header">
+            <span class="physio-bar-label">😌 心情</span>
+            <span class="physio-bar-value" id="physio-mood-value">80</span>
+            <span class="physio-bar-level" id="physio-mood-label">很好 😊</span>
+          </div>
+          <div class="physio-bar-container">
+            <div class="physio-bar" id="physio-mood-bar" style="width:80%;background:#4caf50;"></div>
+          </div>
+        </div>
+        
+        <div class="physio-bar-item">
+          <div class="physio-bar-header">
+            <span class="physio-bar-label">🔋 社交</span>
+            <span class="physio-bar-value" id="physio-socialbattery-value">100</span>
+            <span class="physio-bar-level" id="physio-socialbattery-label">充足</span>
+          </div>
+          <div class="physio-bar-container">
+            <div class="physio-bar" id="physio-socialbattery-bar" style="width:100%;background:#4caf50;"></div>
+          </div>
+        </div>
+        
+        <div class="physio-info-row">
+          <div class="physio-info-item">
+            <span>⏰ 清醒时长：</span>
+            <span id="physio-awake-duration">0.0 小时</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 图表容器 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div class="physio-chart-container">
+          <div class="physio-chart-title">📈 状态趋势</div>
+          <canvas id="physio-chart-canvas" width="280" height="200"></canvas>
+        </div>
+        <div class="physio-chart-container">
+          <div class="physio-chart-title">🎯 当前状态</div>
+          <canvas id="physio-radar-canvas" width="280" height="200"></canvas>
+        </div>
+      </div>
+      
+      <!-- 状态描述 -->
+      <div style="padding:12px;background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:12px;">
+        <div style="font-weight:500;color:var(--text);margin-bottom:6px;font-size:13px;">💭 当前状态</div>
+        <div id="physio-state-description" style="color:var(--text-dim);font-size:0.9em;line-height:1.6;">加载中...</div>
+      </div>
+      
+      <!-- 恢复建议 -->
+      <div style="padding:12px;background:rgba(255,255,255,0.03);border-radius:8px;">
+        <div style="font-weight:500;color:var(--text);margin-bottom:8px;font-size:13px;">💡 恢复建议</div>
+        <div id="physio-suggestions">
+          <div class="suggestion-item">✅ 状态良好，无需特别建议</div>
+        </div>
+      </div>
+    </details>
+
+    <!-- ========== 重叠说话系统 ========== -->
+    <hr>
+    <h3>💬 重叠说话统计</h3>
+    
+    <p style="color:var(--text-dim);font-size:0.9em;margin-bottom:16px;">查看对话打断的统计数据和习惯分析。</p>
+    
+    <div class="overlap-stats-container">
+      <!-- 总体统计 -->
+      <div class="overlap-stats-grid">
+        <div class="overlap-stat-item">
+          <div class="overlap-stat-label">总打断次数</div>
+          <div class="overlap-stat-value" id="overlap-stats-total">0</div>
+        </div>
+        <div class="overlap-stat-item">
+          <div class="overlap-stat-label">用户打断</div>
+          <div class="overlap-stat-value" id="overlap-stats-user">0</div>
+        </div>
+        <div class="overlap-stat-item">
+          <div class="overlap-stat-label">AI 打断</div>
+          <div class="overlap-stat-value" id="overlap-stats-ai">0</div>
+        </div>
+        <div class="overlap-stat-item">
+          <div class="overlap-stat-label">AI 打断限制</div>
+          <div class="overlap-stat-value">
+            <span id="overlap-stats-ai-count">0</span>/<span id="overlap-stats-ai-limit">3</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 打断来源统计 -->
+      <div style="margin-bottom:12px;">
+        <div style="font-weight:500;color:var(--text);margin-bottom:8px;font-size:13px;">打断方式统计</div>
+        <div class="overlap-source-stats">
+          <div class="overlap-source-item">
+            <div class="overlap-source-icon">🎤</div>
+            <div class="overlap-source-count" id="overlap-stats-speech">0</div>
+            <div class="overlap-source-name">语音</div>
+          </div>
+          <div class="overlap-source-item">
+            <div class="overlap-source-icon">⌨️</div>
+            <div class="overlap-source-count" id="overlap-stats-typing">0</div>
+            <div class="overlap-source-name">打字</div>
+          </div>
+          <div class="overlap-source-item">
+            <div class="overlap-source-icon">🎙️</div>
+            <div class="overlap-source-count" id="overlap-stats-mic">0</div>
+            <div class="overlap-source-name">麦克风</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 饼图 -->
+      <div style="margin-bottom:12px;">
+        <div style="font-weight:500;color:var(--text);margin-bottom:8px;font-size:13px;">打断方式分布</div>
+        <div class="overlap-pie-container">
+          <div id="overlap-pie-chart" class="overlap-pie-chart" style="background:conic-gradient(#60a5fa 0% 100%)"></div>
+          <div class="overlap-pie-legend">
+            <div class="overlap-pie-legend-item">
+              <div class="overlap-pie-legend-color" style="background:#60a5fa"></div>
+              <div class="overlap-pie-legend-text">语音</div>
+              <div class="overlap-pie-legend-percent" id="overlap-pie-speech-percent">100%</div>
+            </div>
+            <div class="overlap-pie-legend-item">
+              <div class="overlap-pie-legend-color" style="background:#a78bfa"></div>
+              <div class="overlap-pie-legend-text">打字</div>
+              <div class="overlap-pie-legend-percent" id="overlap-pie-typing-percent">0%</div>
+            </div>
+            <div class="overlap-pie-legend-item">
+              <div class="overlap-pie-legend-color" style="background:#f472b6"></div>
+              <div class="overlap-pie-legend-text">麦克风</div>
+              <div class="overlap-pie-legend-percent" id="overlap-pie-mic-percent">0%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 模式分析 -->
+      <div style="margin-bottom:12px;padding:12px;background:rgba(255,255,255,0.03);border-radius:8px;">
+        <div style="font-weight:500;color:var(--text);margin-bottom:8px;font-size:13px;">🧠 打断习惯分析</div>
+        <div class="emotional-depth-stats">
+          <div class="stat-row">
+            <span class="stat-label">最常用方式：</span>
+            <span class="stat-value" id="overlap-pattern-most-used">数据不足</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">平均打断时机：</span>
+            <span class="stat-value" id="overlap-pattern-avg-time">-</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 打断历史 -->
+    <details class="memory-section" style="margin-top:12px;">
+      <summary>📜 打断历史（最近 20 条）</summary>
+      <div id="overlap-history-timeline" class="overlap-history-timeline">
+        <div class="overlap-history-empty">暂无打断记录</div>
+      </div>
+    </details>
+    
+    <button id="overlap-clear-history" class="btn-secondary btn-small" style="margin-top:12px;">清空打断历史</button>
+
+    <!-- ========== 记忆导出系统 ========== -->
+    <hr>
+    <h3>💾 数据管理</h3>
+    
+    <p style="color:var(--text-dim);font-size:0.9em;margin-bottom:16px;">这段关系属于你，你可以随时导出和备份所有数据。</p>
+    
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <!-- 导出区域 -->
+      <div style="padding:14px;background:rgba(255,255,255,0.05);border-radius:8px;border:1px solid rgba(255,255,255,0.1);">
+        <div style="font-weight:500;color:var(--text);margin-bottom:8px;">📦 导出记忆</div>
+        <p style="color:var(--text-dim);font-size:0.85em;margin-bottom:12px;">将所有对话记忆、关系数据、成长记录打包下载</p>
+        
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;font-size:0.9em;">
+          <input type="checkbox" id="export-exclude-api" checked style="width:16px;height:16px;cursor:pointer;">
+          <span style="color:var(--text);">排除 API Key（保护隐私）</span>
+        </label>
+        
+        <button id="btn-export-memory" class="btn-primary btn-small" style="width:100%;">📥 导出所有数据</button>
+      </div>
+      
+      <!-- 导入区域 -->
+      <div style="padding:14px;background:rgba(255,255,255,0.05);border-radius:8px;border:1px solid rgba(255,255,255,0.1);">
+        <div style="font-weight:500;color:var(--text);margin-bottom:8px;">📥 导入记忆</div>
+        <p style="color:var(--text-dim);font-size:0.85em;margin-bottom:12px;">从之前导出的文件恢复数据</p>
+        
+        <input type="file" id="import-file-input" accept=".json" style="display:none;">
+        <button id="btn-import-memory" class="btn-secondary btn-small" style="width:100%;">📂 选择文件导入</button>
+      </div>
+    </div>
+    
+    <div style="margin-top:12px;padding:10px;background:rgba(255,200,0,0.1);border-left:3px solid #ffc107;border-radius:4px;">
+      <div style="font-size:0.85em;color:var(--text);line-height:1.6;">
+        <strong>⚠️ 重要提示</strong><br>
+        • 导出的文件包含你和 AI 的所有记忆和关系数据<br>
+        • 文件是纯文本 JSON 格式，请妥善保管<br>
+        • 导入会覆盖当前数据，建议先导出备份<br>
+        • 所有操作都在本地完成，不上传到服务器
+      </div>
+    </div>
+
     <div class="modal-actions">
       <button id="s-save" class="btn-primary">保存</button>
       <button id="s-close" class="btn-secondary">关闭</button>
@@ -256,6 +713,17 @@
 <script src="memory-system.js"></script>
 <script src="nlu.js"></script>
 <script src="affection-system.js"></script>
+<script src="emotional-depth-system.js"></script>
+<script src="ai-principles-system.js"></script>
+<script src="personality-consistency-system.js"></script>
+<script src="anti-addiction-system.js"></script>
+<script src="memory-export-system.js"></script>
+<script src="physiological-state-system.js"></script>
+<script src="advanced-speech-rhythm-system.js"></script>
+<script src="ssml-emotion-system.js"></script>
+<script src="overlap-speech-system.js"></script>
+<script src="overlap-speech-visual.js"></script>
+<script src="physiological-state-visual.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
