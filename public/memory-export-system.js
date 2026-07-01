@@ -52,7 +52,7 @@ const MemoryExportSystem = (() => {
     // 配置数据
     if (includeConfig) {
       try {
-        const config = JSON.parse(localStorage.getItem('ai-companion-config') || '{}');
+        const config = JSON.parse(localStorage.getItem(STORAGE.CONFIG) || '{}');
         data.metadata.characterName = config.name || '未命名';
         
         // 处理 API Key
@@ -69,9 +69,9 @@ const MemoryExportSystem = (() => {
     // 记忆系统
     if (includeMemory) {
       try {
-        const summaries = JSON.parse(localStorage.getItem('ai-companion-summaries') || '[]');
-        const keyMemory = JSON.parse(localStorage.getItem('ai-companion-key-memory') || '[]');
-        const mistakeTracker = JSON.parse(localStorage.getItem('ai-companion-mistake-tracker') || '{}');
+        const summaries = JSON.parse(localStorage.getItem(STORAGE.MEMORY.SUMMARIES) || '[]');
+        const keyMemory = JSON.parse(localStorage.getItem(STORAGE.MEMORY.KEY_MEMORIES) || '[]');
+        const mistakeTracker = JSON.parse(localStorage.getItem(STORAGE.MEMORY.MISTAKE_TRACKER) || '{}');
         
         data.memorySystem = {
           summaries,
@@ -90,7 +90,7 @@ const MemoryExportSystem = (() => {
     // 好感度系统
     if (includeAffection) {
       try {
-        const affection = JSON.parse(localStorage.getItem('ai-companion-affection') || '{}');
+        const affection = JSON.parse(localStorage.getItem(STORAGE.AFFECTION) || '{}');
         data.affectionSystem = affection;
       } catch (err) {
         console.error('[Export] 读取好感度系统失败:', err);
@@ -100,7 +100,7 @@ const MemoryExportSystem = (() => {
     // 情感深度系统
     if (includeEmotionalDepth) {
       try {
-        const emotionalDepth = JSON.parse(localStorage.getItem('ai-companion-emotional-depth') || '{}');
+        const emotionalDepth = JSON.parse(localStorage.getItem(STORAGE.EMOTIONAL_DEPTH) || '{}');
         data.emotionalDepthSystem = emotionalDepth;
       } catch (err) {
         console.error('[Export] 读取情感深度系统失败:', err);
@@ -110,7 +110,7 @@ const MemoryExportSystem = (() => {
     // AI 原则系统
     if (includePrinciples) {
       try {
-        const principles = JSON.parse(localStorage.getItem('ai-companion-ai-principles') || '{}');
+        const principles = JSON.parse(localStorage.getItem(STORAGE.AI_PRINCIPLES) || '{}');
         data.aiPrinciplesSystem = principles;
       } catch (err) {
         console.error('[Export] 读取 AI 原则系统失败:', err);
@@ -120,7 +120,7 @@ const MemoryExportSystem = (() => {
     // 人格一致性系统
     if (includePersonality) {
       try {
-        const personality = JSON.parse(localStorage.getItem('ai-companion-personality-consistency') || '{}');
+        const personality = JSON.parse(localStorage.getItem(STORAGE.PERSONALITY_CONSISTENCY) || '{}');
         data.personalityConsistencySystem = personality;
       } catch (err) {
         console.error('[Export] 读取人格一致性系统失败:', err);
@@ -130,7 +130,7 @@ const MemoryExportSystem = (() => {
     // 防沉迷系统
     if (includeAntiAddiction) {
       try {
-        const antiAddiction = JSON.parse(localStorage.getItem('ai-companion-anti-addiction') || '{}');
+        const antiAddiction = JSON.parse(localStorage.getItem(STORAGE.ANTI_ADDICTION) || '{}');
         data.antiAddictionSystem = antiAddiction;
       } catch (err) {
         console.error('[Export] 读取防沉迷系统失败:', err);
@@ -502,51 +502,51 @@ const MemoryExportSystem = (() => {
       
       // 恢复配置
       if (restoreConfig && data.config) {
-        localStorage.setItem('ai-companion-config', JSON.stringify(data.config));
+        localStorage.setItem(STORAGE.CONFIG, JSON.stringify(data.config));
         restored.push('用户配置');
       }
       
       // 恢复记忆系统
       if (restoreMemory && data.memorySystem) {
         if (data.memorySystem.summaries) {
-          localStorage.setItem('ai-companion-summaries', JSON.stringify(data.memorySystem.summaries));
+          localStorage.setItem(STORAGE.MEMORY.SUMMARIES, JSON.stringify(data.memorySystem.summaries));
         }
         if (data.memorySystem.keyMemories) {
-          localStorage.setItem('ai-companion-key-memory', JSON.stringify(data.memorySystem.keyMemories));
+          localStorage.setItem(STORAGE.MEMORY.KEY_MEMORIES, JSON.stringify(data.memorySystem.keyMemories));
         }
         if (data.memorySystem.mistakeTracker) {
-          localStorage.setItem('ai-companion-mistake-tracker', JSON.stringify(data.memorySystem.mistakeTracker));
+          localStorage.setItem(STORAGE.MEMORY.MISTAKE_TRACKER, JSON.stringify(data.memorySystem.mistakeTracker));
         }
         restored.push('记忆系统');
       }
       
       // 恢复好感度系统
       if (restoreAffection && data.affectionSystem) {
-        localStorage.setItem('ai-companion-affection', JSON.stringify(data.affectionSystem));
+        localStorage.setItem(STORAGE.AFFECTION, JSON.stringify(data.affectionSystem));
         restored.push('好感度系统');
       }
       
       // 恢复情感深度系统
       if (restoreEmotionalDepth && data.emotionalDepthSystem) {
-        localStorage.setItem('ai-companion-emotional-depth', JSON.stringify(data.emotionalDepthSystem));
+        localStorage.setItem(STORAGE.EMOTIONAL_DEPTH, JSON.stringify(data.emotionalDepthSystem));
         restored.push('情感深度系统');
       }
       
       // 恢复 AI 原则系统
       if (restorePrinciples && data.aiPrinciplesSystem) {
-        localStorage.setItem('ai-companion-ai-principles', JSON.stringify(data.aiPrinciplesSystem));
+        localStorage.setItem(STORAGE.AI_PRINCIPLES, JSON.stringify(data.aiPrinciplesSystem));
         restored.push('AI 原则系统');
       }
       
       // 恢复人格一致性系统
       if (restorePersonality && data.personalityConsistencySystem) {
-        localStorage.setItem('ai-companion-personality-consistency', JSON.stringify(data.personalityConsistencySystem));
+        localStorage.setItem(STORAGE.PERSONALITY_CONSISTENCY, JSON.stringify(data.personalityConsistencySystem));
         restored.push('人格一致性系统');
       }
       
       // 恢复防沉迷系统
       if (restoreAntiAddiction && data.antiAddictionSystem) {
-        localStorage.setItem('ai-companion-anti-addiction', JSON.stringify(data.antiAddictionSystem));
+        localStorage.setItem(STORAGE.ANTI_ADDICTION, JSON.stringify(data.antiAddictionSystem));
         restored.push('防沉迷系统');
       }
       
