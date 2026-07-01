@@ -11,8 +11,8 @@ const PORT = process.env.PORT || 3000;
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 
-// Fish Audio 配置
-const FISH_AUDIO_API_KEY = 'b276509ed4024d6791d7545b9a519951';
+// Fish Audio 配置（API Key 从环境变量读取，不再硬编码）
+const FISH_AUDIO_API_KEY = process.env.FISH_AUDIO_API_KEY || '';
 const FISH_AUDIO_API_URL = 'https://api.fish.audio/v1/tts';
 
 app.use(express.json({ limit: '100mb' }));
@@ -57,7 +57,7 @@ app.get('/api/tts', async (req, res) => {
 
   try {
     // 使用 Fish Audio（不支持 SSML）
-    if (useFishAudio && referenceId) {
+    if (useFishAudio && referenceId && FISH_AUDIO_API_KEY) {
       console.log(`[Fish Audio] 生成语音: ${text.slice(0, 50)}...`);
       
       // Fish Audio 不支持 SSML，需要提取纯文本
