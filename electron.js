@@ -1,198 +1,17 @@
 const { app, BrowserWindow } = require('electron');
-const path = require('path');
 
-// 直接在主进程中启动 Express 服务器
-const express = require('express');
-const axios = require('axios');
-const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
-const fs = require('fs');
-const https = require('https');
-const http = require('http');
+// 复用 server.js 里唯一的 Express app 实例（含全部路由、TTS 降级逻辑等），
+// 不再维护一份重复代码 —— 避免出现两份实现不同步的 bug（例如曾经的 API Key 硬编码泄露）。
+// server.js 检测到自己是被 require 而非直接 `node server.js` 运行时，不会自动 listen，
+// 由这里决定何时启动监听。
+const expressApp = require('./server.js');
+
+const PORT = process.env.PORT || 3000;
 
 let mainWindow;
 let server;
 
-// Fish Audio 配置（API Key 从环境变量读取，不再硬编码，与 server.js 保持一致）
-const FISH_AUDIO_API_KEY = process.env.FISH_AUDIO_API_KEY || '';
-const FISH_AUDIO_API_URL = 'https://api.fish.audio/v1/tts';
-
-// 启动 Express 服务器
 function startServer() {
-  const PORT = 3000;
-  const expressApp = express();
-  const uploadsDir = path.join(__dirname, 'uploads');
-  
-  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
-
-  expressApp.use(express.json({ limit: '100mb' }));
-  expressApp.use(express.urlencoded({ limit: '100mb', extended: true }));
-  expressApp.use(express.static(path.join(__dirname, 'public')));
-  expressApp.use('/uploads', express.static(uploadsDir));
-
-  // TTS 实例缓存
-  let ttsInstance = null;
-  let ttsVoiceName = '';
-
-  async function getTTS(voice) {
-    if (ttsInstance && ttsVoiceName === voice) {
-      try { return ttsInstance; } catch { /* stale */ }
-    }
-    ttsInstance = new MsEdgeTTS();
-    await ttsInstance.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
-    ttsVoiceName = voice;
-    return ttsInstance;
-  }
-
-  // TTS 接口
-  expressApp.get('/api/tts', async (req, res) => {
-    const text = decodeURIComponent(req.query.text || '').slice(0, 500);
-    const voice = req.query.voice || 'zh-CN-XiaoxiaoNeural';
-    const rate = req.query.rate || '+0%';
-    const pitch = req.query.pitch || '+0Hz';
-    const useFishAudio = req.query.fish === 'true';
-    const referenceId = req.query.referenceId || '';
-    
-    if (!text) return res.status(400).json({ error: 'text required' });
-
-    try {
-      if (useFishAudio && referenceId && FISH_AUDIO_API_KEY) {
-        const response = await axios.post(
-          FISH_AUDIO_API_URL,
-          {
-            text: text,
-            reference_id: referenceId,
-            format: 'mp3',
-            mp3_bitrate: 64,
-          },
-          {
-            headers: {
-              'Authorization': `Bearer ${FISH_AUDIO_API_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            responseType: 'stream',
-            timeout: 15000,
-          }
-        );
-
-        res.setHeader('Content-Type', 'audio/mpeg');
-        res.setHeader('Cache-Control', 'no-store');
-        response.data.pipe(res);
-        return;
-      }
-
-      const tts = await getTTS(voice);
-      const { audioStream } = tts.toStream(text, { rate, pitch });
-
-      res.setHeader('Content-Type', 'audio/mpeg');
-      res.setHeader('Cache-Control', 'no-store');
-      audioStream.on('error', () => { ttsInstance = null; if (!res.headersSent) res.status(500).end(); else res.end(); });
-      audioStream.pipe(res);
-    } catch (err) {
-      console.error('[TTS error]', err.message);
-      
-      if (useFishAudio && referenceId) {
-        try {
-          ttsInstance = null;
-          const tts = await getTTS('zh-CN-XiaoxiaoNeural');
-          const { audioStream } = tts.toStream(text, { rate: '+0%', pitch: '+0Hz' });
-          res.setHeader('Content-Type', 'audio/mpeg');
-          res.setHeader('Cache-Control', 'no-store');
-          audioStream.pipe(res);
-          return;
-        } catch (fallbackErr) {
-          console.error('[Edge TTS fallback error]', fallbackErr.message);
-        }
-      }
-      
-      ttsInstance = null;
-      if (!res.headersSent) res.status(500).json({ error: 'TTS failed: ' + err.message });
-    }
-  });
-
-  // 文件上传
-  expressApp.post('/api/upload', (req, res) => {
-    const { name, data } = req.body;
-    if (!name || !data) return res.status(400).json({ error: 'missing fields' });
-    try {
-      const ext = name.split('.').pop() || 'bin';
-      const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const buffer = Buffer.from(data, 'base64');
-      fs.writeFileSync(path.join(uploadsDir, filename), buffer);
-      res.json({ url: `/uploads/${filename}`, name });
-    } catch (err) {
-      res.status(500).json({ error: 'upload failed: ' + err.message });
-    }
-  });
-
-  // AI 聊天代理
-  expressApp.post('/api/chat', async (req, res) => {
-    const { apiUrl, apiKey, model, messages } = req.body;
-    if (!apiUrl || !apiKey || !model || !messages) return res.status(400).json({ error: '缺少参数' });
-
-    const url = new URL(apiUrl);
-    const transport = url.protocol === 'https:' ? https : http;
-    const postData = JSON.stringify({ model, messages, temperature: 0.85, max_tokens: 512 });
-
-    const apiReq = transport.request({
-      hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80),
-      path: url.pathname + url.search, method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData), 'Authorization': `Bearer ${apiKey}` },
-    }, (apiRes) => {
-      let data = '';
-      apiRes.on('data', (c) => (data += c));
-      apiRes.on('end', () => { try { res.status(apiRes.statusCode).json(JSON.parse(data)); } catch { res.status(502).json({ error: 'parse error' }); } });
-    });
-    apiReq.on('error', (e) => res.status(502).json({ error: '连接失败: ' + e.message }));
-    apiReq.write(postData);
-    apiReq.end();
-  });
-
-  // 视觉分析
-  expressApp.post('/api/vision', async (req, res) => {
-    const { apiUrl, apiKey, image } = req.body;
-    if (!apiUrl || !apiKey || !image) return res.status(400).json({ error: '缺少参数' });
-
-    try {
-      const response = await axios.post(
-        apiUrl,
-        {
-          model: 'glm-4v',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:image/jpeg;base64,${image}`,
-                  },
-                },
-                {
-                  type: 'text',
-                  text: '请简短描述用户当前的表情和状态（1-2 句话）。例如："用户在微笑，看起来心情不错" 或 "用户皱着眉头，似乎有些困扰"。',
-                },
-              ],
-            },
-          ],
-          temperature: 0.7,
-          max_tokens: 100,
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 15000,
-        }
-      );
-
-      const analysis = response.data.choices?.[0]?.message?.content || '';
-      res.json({ analysis });
-    } catch (err) {
-      res.status(500).json({ error: 'Vision analysis failed: ' + err.message });
-    }
-  });
-
   server = expressApp.listen(PORT, () => {
     console.log(`[Electron] 服务器已启动: http://localhost:${PORT}`);
   });
@@ -264,7 +83,7 @@ app.on('window-all-closed', () => {
     console.log('[Electron] 关闭服务器...');
     server.close();
   }
-  
+
   // Mac 上保持应用运行
   if (process.platform !== 'darwin') {
     app.quit();

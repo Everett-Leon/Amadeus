@@ -164,24 +164,59 @@ app.post('/api/upload', (req, res) => {
 });
 
 // ========== AI 聊天代理 ==========
+// 注：之前"偶发 502"排查不出根因，是因为所有网络错误/超时/解析失败都被无差别地
+// 标记成 502 且完全没有服务端日志——出问题时无从下手。这里补上错误日志和显式超时，
+// 且尽量把上游真实状态码/错误原因透传出来，方便下次真的出问题时能定位。
 app.post('/api/chat', async (req, res) => {
   const { apiUrl, apiKey, model, messages } = req.body;
   if (!apiUrl || !apiKey || !model || !messages) return res.status(400).json({ error: '缺少参数' });
 
-  const url = new URL(apiUrl);
+  let url;
+  try {
+    url = new URL(apiUrl);
+  } catch (e) {
+    return res.status(400).json({ error: 'apiUrl 格式错误: ' + e.message });
+  }
+
   const transport = url.protocol === 'https:' ? https : http;
   const postData = JSON.stringify({ model, messages, temperature: 0.85, max_tokens: 512 });
+  let responded = false;
+  const respondOnce = (status, body) => {
+    if (responded || res.headersSent) return;
+    responded = true;
+    res.status(status).json(body);
+  };
 
   const apiReq = transport.request({
     hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80),
     path: url.pathname + url.search, method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData), 'Authorization': `Bearer ${apiKey}` },
+    timeout: 30000, // 与前端 callAPI() 的 30s 超时保持一致
   }, (apiRes) => {
     let data = '';
     apiRes.on('data', (c) => (data += c));
-    apiRes.on('end', () => { try { res.status(apiRes.statusCode).json(JSON.parse(data)); } catch { res.status(502).json({ error: 'parse error' }); } });
+    apiRes.on('end', () => {
+      try {
+        respondOnce(apiRes.statusCode, JSON.parse(data));
+      } catch (parseErr) {
+        console.error(`[Chat API] 上游返回非 JSON (status=${apiRes.statusCode}):`, data.slice(0, 300));
+        // 透传上游真实状态码（多数是它真的错了），拿不到才兜底 502
+        respondOnce(apiRes.statusCode || 502, { error: '上游返回解析失败: ' + parseErr.message });
+      }
+    });
   });
-  apiReq.on('error', (e) => res.status(502).json({ error: '连接失败: ' + e.message }));
+
+  apiReq.on('timeout', () => {
+    console.error(`[Chat API] 请求超时 (30s): ${url.hostname}${url.pathname}`);
+    apiReq.destroy();
+    respondOnce(504, { error: 'LLM API 请求超时（30s）' });
+  });
+
+  apiReq.on('error', (e) => {
+    console.error(`[Chat API] 请求错误 (${url.hostname}):`, e.message);
+    respondOnce(502, { error: '连接失败: ' + e.message });
+  });
+
   apiReq.write(postData);
   apiReq.end();
 });
@@ -234,4 +269,11 @@ app.post('/api/vision', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`🌸 AI Companion v0.3 → http://localhost:${PORT}`));
+// 仅在直接运行 `node server.js` 时才自动监听端口。
+// 被 electron.js 通过 require('./server.js') 复用时，由调用方决定何时/是否 listen，
+// 避免两份重复的路由实现分别维护（这正是 Fish Audio Key 泄露 bug 的根源）。
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`🌸 AI Companion v0.3 → http://localhost:${PORT}`));
+}
+
+module.exports = app;
