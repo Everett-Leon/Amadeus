@@ -346,8 +346,12 @@ ${dialogue}`;
    * @returns {number} 天数
    */
   function getDaysSince(dateStr) {
+    // 注：new Date(非法字符串) 不会抛异常，只会得到 Invalid Date，
+    // 后续用它做减法会得到 NaN——try/catch 完全拦不住这种情况，
+    // 必须显式判断 isNaN(past.getTime())，否则 applyDecay() 会算出 NaN 权重。
     try {
       const past = new Date(dateStr);
+      if (isNaN(past.getTime())) return 0;
       const now = new Date();
       const diff = now - past;
       return Math.max(0, diff / (1000 * 60 * 60 * 24));

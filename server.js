@@ -38,7 +38,11 @@ async function getTTS(voice) {
 }
 
 app.get('/api/tts', async (req, res) => {
-  const rawText = decodeURIComponent(req.query.text || '');
+  // 注：Express 的 query parser 已经对 query string 做过一次 URL 解码了，
+  // 这里不能再手动 decodeURIComponent 一次——否则文本里任何一个裸 "%"
+  // （比如"50%的信心"、"电量剩30%"这种日常对话里极常见的表达）都会让
+  // decodeURIComponent 抛出 "URI malformed"，导致该条消息 TTS 直接 500，完全没声音。
+  const rawText = String(req.query.text || '');
   const voice = req.query.voice || 'zh-CN-XiaoxiaoNeural';
   const rate = req.query.rate || '+0%';
   const pitch = req.query.pitch || '+0Hz';
@@ -151,11 +155,23 @@ app.post('/api/upload', (req, res) => {
     return res.status(400).json({ error: 'missing fields' });
   }
   try {
-    const ext = name.split('.').pop() || 'bin';
+    // 安全修复：ext 来自用户传的 name，之前没做任何过滤——如果 name 里没有 "."
+    // （比如 name = "../../../../tmp/evil"），split('.').pop() 会把整个字符串
+    // 当成 "扩展名" 塞进 filename，里面带的 "/"、".." 会让 path.join() 逃出
+    // uploadsDir，变成任意路径写入（路径穿越漏洞）。这里改成白名单，只允许
+    // 常见的字母数字扩展名，且限制长度。
+    const rawExt = (name.includes('.') ? name.split('.').pop() : '') || '';
+    const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt : 'bin';
     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const destPath = path.join(uploadsDir, filename);
+    // 双重保险：再校验一遍最终路径确实落在 uploadsDir 内
+    if (!destPath.startsWith(uploadsDir + path.sep)) {
+      console.error('[Upload] 检测到路径穿越尝试:', name);
+      return res.status(400).json({ error: 'invalid filename' });
+    }
     const buffer = Buffer.from(data, 'base64');
     console.log(`[Upload] 上传文件: ${name} (${(buffer.length / 1024).toFixed(1)} KB) -> ${filename}`);
-    fs.writeFileSync(path.join(uploadsDir, filename), buffer);
+    fs.writeFileSync(destPath, buffer);
     res.json({ url: `/uploads/${filename}`, name });
   } catch (err) {
     console.error('[Upload] 上传失败:', err.message);

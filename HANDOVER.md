@@ -103,7 +103,15 @@ ai-companion/
 | `a205033` | **P0 #1-#3**：API Key 环境变量化、jQuery lastChild 修复、chatHistory 安全访问 | `FISH_AUDIO_API_KEY` 在 `~/.zshrc` 中配置（具体值不写入仓库，问少爷要） |
 | `b589dad` | **P1 #4-#5**：config.background 重复定义分离、System Prompt 脏标记 | `sceneBg` 替代了 `config.background`，旧数据自动迁移 |
 | `3b8e9ec` | **P1 #6-#7**：`storage-keys.js` 统一管理 12 个 localStorage key、buildSystemPrompt 独立 try/catch | **新增文件**，不要删除 |
-| （待补充） | **安全修复**：`electron.js` 与 `HANDOVER.md/.html` 中硬编码/明文记录的 Fish Audio API Key 已清除，`electron.js` 改为读 `process.env.FISH_AUDIO_API_KEY`（与 `server.js` 保持一致） | ⚠️ 泄露的两个 key 已在公开仓库历史中出现过，**必须去 Fish Audio 后台吊销重新生成**，改代码本身不能撤销已公开的旧 key |
+| （待补充） | **安全修复**：`electron.js` 与 `HANDOVER.md/.html` 中硬编码/明文记录的 Fish Audio API Key 已清除，`electron.js` 改为读 `process.env.FISH_AUDIO_API_KEY`（与 `server.js` 保持一致） | ⚠️ 泄露的两个 key 已在公开仓库历史中出现过，**必须去 Fish Audio 后台吊销重新生成**，改代码本身不能撤销已公开的旧 key（少爷已吊销 ✅） |
+| （待补充） | **一批 bug 修复**（2026-07-17）：见下方清单 | 均已用 node -c / curl / node -e 隔离脚本验证 |
+
+**这轮修复的具体 bug 清单**：
+1. **`server.js` `/api/tts` 双重解码崩溃（高影响）** — Express 的 query parser 已经解码过一次 query string，`server.js` 又手动 `decodeURIComponent()` 了一次；只要文本里有个裸 `%`（"50%的信心"这种日常表达极常见），第二次解码就抛 `URI malformed`，TTS 直接 500、完全没声音。已改为直接用 `req.query.text`，不再重复解码
+2. **`server.js` `/api/upload` 路径穿越漏洞** — `ext` 从用户传的 `name` 里取，如果 `name` 没有 `.`（比如 `../../../../tmp/evil`），整个字符串会被当成"扩展名"塞进文件名，里面的 `/` `..` 能让 `path.join()` 逃出 `uploads/` 目录、写到任意路径。已加白名单校验 + 二次路径校验
+3. **`memory-system.js` `getDaysSince()` 的 try/catch 是假的** — `new Date(非法字符串)` 不会抛异常，只会得到 `Invalid Date`，后续减法算出 `NaN`，try/catch 完全拦不住。缺失/损坏 `lastAccessed`/`createdAt` 字段的记忆会被 `applyDecay()` 算出 `NaN` 权重。已加 `isNaN(past.getTime())` 显式判断
+4. **`app.js` 重要时刻/内部笑话渲染缺少 `escapeHtml`** — `recordMilestone`/`addInsideJoke` 接口设计上是要接入 AI 动态生成内容的（虽然当前调用点还是硬编码文本，暂无实际注入路径），渲染时用 `innerHTML` 却没转义，先补上避免以后接上动态内容时留 XSS 坑
+5. **`app.js` `callAPI()` 错误信息丢失** — 之前 `!res.ok` 只抛 `HTTP 502`，丢弃了 server.js 刚补上的详细错误原因；现在读取响应体里的 `error` 字段，并根据超时/401/429 等不同状态码给用户更准确的提示文案
 
 ### P0 Bug 详情（最重要）
 
