@@ -100,9 +100,10 @@ ai-companion/
 
 | 提交 | 修复内容 | 注意事项 |
 |------|---------|---------|
-| `a205033` | **P0 #1-#3**：API Key 环境变量化、jQuery lastChild 修复、chatHistory 安全访问 | `FISH_AUDIO_API_KEY` 在 `~/.zshrc` 中，值是 `e5e5c870ceac4deba2e9af29957fd8b4` |
+| `a205033` | **P0 #1-#3**：API Key 环境变量化、jQuery lastChild 修复、chatHistory 安全访问 | `FISH_AUDIO_API_KEY` 在 `~/.zshrc` 中配置（具体值不写入仓库，问少爷要） |
 | `b589dad` | **P1 #4-#5**：config.background 重复定义分离、System Prompt 脏标记 | `sceneBg` 替代了 `config.background`，旧数据自动迁移 |
 | `3b8e9ec` | **P1 #6-#7**：`storage-keys.js` 统一管理 12 个 localStorage key、buildSystemPrompt 独立 try/catch | **新增文件**，不要删除 |
+| （待补充） | **安全修复**：`electron.js` 与 `HANDOVER.md/.html` 中硬编码/明文记录的 Fish Audio API Key 已清除，`electron.js` 改为读 `process.env.FISH_AUDIO_API_KEY`（与 `server.js` 保持一致） | ⚠️ 泄露的两个 key 已在公开仓库历史中出现过，**必须去 Fish Audio 后台吊销重新生成**，改代码本身不能撤销已公开的旧 key |
 
 ### P0 Bug 详情（最重要）
 
@@ -130,7 +131,7 @@ ttsVoice: 'fish-7f92f8afb8ec43bf81429cc1c9199cb1',  // 显示名：🐟 AD学姐
 
 ### API Key
 
-- Key：`e5e5c870ceac4deba2e9af29957fd8b4`（存在 `~/.zshrc`）
+- Key：存在 `~/.zshrc` 中，**不写入仓库**（历史上曾在此文档和 `electron.js` 中硬编码泄露过，已修复并建议已吊销重新生成，问少爷要最新值）
 - 这是少爷新注册的账号，之前旧账号（`7f92f8...` 同一个 referenceId 也是旧账号的）已失效
 - **Fish Audio 是付费的**，每次 AI 说话都调用 TTS API 会扣费
 - 少爷没决定要不要切免费方案（Edge TTS），不要擅自改默认声线
@@ -160,7 +161,7 @@ ttsVoice: 'fish-7f92f8afb8ec43bf81429cc1c9199cb1',  // 显示名：🐟 AD学姐
 # 运行在：~/Desktop/Amadeus/ai-companion/
 
 cd ~/Desktop/Amadeus/ai-companion
-export FISH_AUDIO_API_KEY="e5e5c870ceac4deba2e9af29957fd8b4"
+export FISH_AUDIO_API_KEY="<问少爷要，存在 ~/.zshrc 中，不要写入仓库文件>"
 node server.js
 # → http://localhost:3000
 ```

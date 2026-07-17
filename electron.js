@@ -12,8 +12,8 @@ const http = require('http');
 let mainWindow;
 let server;
 
-// Fish Audio 配置
-const FISH_AUDIO_API_KEY = 'b276509ed4024d6791d7545b9a519951';
+// Fish Audio 配置（API Key 从环境变量读取，不再硬编码，与 server.js 保持一致）
+const FISH_AUDIO_API_KEY = process.env.FISH_AUDIO_API_KEY || '';
 const FISH_AUDIO_API_URL = 'https://api.fish.audio/v1/tts';
 
 // 启动 Express 服务器
@@ -55,7 +55,7 @@ function startServer() {
     if (!text) return res.status(400).json({ error: 'text required' });
 
     try {
-      if (useFishAudio && referenceId) {
+      if (useFishAudio && referenceId && FISH_AUDIO_API_KEY) {
         const response = await axios.post(
           FISH_AUDIO_API_URL,
           {
